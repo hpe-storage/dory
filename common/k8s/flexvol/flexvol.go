@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"time"
+	"strings"
 )
 
 const (
@@ -63,6 +64,7 @@ const (
 var (
 	//createVolumes indicate whether the driver should create missing volumes
 	createVolumes = true
+	pluginID = ""
 
 	execPath string
 
@@ -104,6 +106,7 @@ func (ar *AttachRequest) getBestName() string {
 func Config(ePath string, options *dockervol.Options) (err error) {
 	dvp, err = dockervol.NewDockerVolumePlugin(options)
 	createVolumes = options.CreateVolumes
+	pluginID = options.ManagedPluginID
 	execPath = ePath
 	return err
 }
@@ -235,7 +238,14 @@ func Mount(args []string) (string, error) {
 
 	err = doMount(args[0], path, dockerVolName, mountID)
 	if err != nil {
-		return "", err
+		pathForManagedPlugin := "/var/lib/docker/plugins/" + pluginID + "/rootfs"+ path
+		util.LogDebug.Printf("pathForManagedPlugin: %s", pathForManagedPlugin)
+		err = linux.BindMount(pathForManagedPlugin, args[0], false)
+
+		if err != nil {
+			return "", err
+		}
+		path = pathForManagedPlugin
 	}
 
 	// Set selinux context if configured
@@ -346,7 +356,9 @@ func getVolumeNameFromMountPath(k8sPath, dockerPath string) (string, error) {
 			return "", err
 		}
 		for _, vol := range volumes.Volumes {
-			if vol.Mountpoint == dockerPath {
+			util.LogDebug.Printf("dockerPath %s, volume mountpoint %s", dockerPath, vol.Mountpoint)
+			if (vol.Mountpoint == dockerPath || (findStringAfterLastSlash(vol.Mountpoint) == findStringAfterLastSlash(dockerPath))){
+				util.LogDebug.Printf(" returning docker volume name %s", vol.Name)
 				return vol.Name, nil
 			}
 		}
@@ -358,6 +370,15 @@ func getVolumeNameFromMountPath(k8sPath, dockerPath string) (string, error) {
 	return dockerVolume.Volume.Name, nil
 }
 
+func findStringAfterLastSlash(s string) string {
+
+	//s := "/var/lib/docker/plugins/a238188db964f8139af8d502a9b134b1f9522ccc27936ae5512b2f1b662f0aa5/rootfs/opt/hpe/data/hpedocker-dm-uuid-mpath-360002ac0000000000101331f00019d52"
+
+	flds := strings.Split(s, "/")
+	arrayLength := len(flds)
+	fmt.Printf(" Length = %d, last substring %s" ,arrayLength, flds[arrayLength -1])
+	return flds[arrayLength - 1]
+}
 func findJSON(args []string, req *AttachRequest) (string, error) {
 	var err error
 	for i := 1; i < len(args); i++ {
