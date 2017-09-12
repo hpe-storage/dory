@@ -1,4 +1,6 @@
-# Dory - The Kubernetes Flexvolume Driver for Docker Volume Plugins
+Dory
+===
+# Kubernetes Flexvolume Driver for Docker Volume Plugins
 
 Dory is a driver for the [Kubernetes Flexvolume](https://github.com/Kubernetes/community/blob/master/contributors/devel/flexvolume.md) Volume type.  This driver translates Flexvolume requests to [Docker Volume Plugin](https://docs.docker.com/engine/extend/plugins_volume/) requests.  This allows the administrator to leverage [existing Docker Volume Plugins](https://docs.docker.com/engine/extend/legacy_plugins/) in a Kubernetes cluster.  Dory provides the ability to 'just in time' provision storage as well as have the orchestrator automatically attach/mount and detach/unmount Persistent Volumes.
 
