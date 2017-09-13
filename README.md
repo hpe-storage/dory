@@ -88,5 +88,16 @@ Flexvolume currently doesn't communicate the size of the volume to its driver.  
 This example uses the Docker Volume Driver from [HPE's Nimble Storage](https://connect.nimblestorage.com/community/app-integration/docker) to create a Persistent Volume to back a MySQL database instance. First, the administrator creates a Persistent Volume named "sqldata-pv".  In order to be able to reference this Persistent Volume explicitly in the claim, the 'volumeName.dory' label is added.  The options section may contain any create options the Docker Volume Driver supports.  The administrator then creates a Persistent Volume Claim which uses a matchLabels selector to find the Persistent Volume.  Finally, the administrator creates a Replication Controller that references the claim by name.  When the Replication Controller is created, the Persistent Volume is matched with the Persistent Volume Claim and the Docker Volume is then created and then mounted.
 <img src="example.png">
 
+# Future
+What's next?  We're looking extending this project to include a [Dynamic Provisioner](http://blog.kubernetes.io/2017/03/dynamic-provisioning-and-storage-classes-kubernetes.html).  We're also hoping to add Windows support.
+
+# Thanks
+Thank you to [Chakravarthy Nelluri](https://github.com/chakri-nelluri) for all his work on [Flexvolume](https://github.com/kubernetes/kubernetes/commit/fa76de79e5d1670b8e6add30f0159c833534a298#diff-af00671c74d885ce20891c24516198e8) which has made this 'out of tree' work possible.
+
+Thank you to [Michael Mattsson](https://connect.nimblestorage.com/people/mmattsson), TME extraordinaire, for his help testing and for writing a [blog post](https://connect.nimblestorage.com/community/app-integration/blog/2017/06/21/tech-preview-bringing-nimble-storage-to-kubernetes-and-openshift) about what we were up to.
+
 # Licensing
 Dory is licensed under the Apache License, Version 2.0. Please see [LICENSE](LICENSE) for the full license text.
+
+## Vendoring
+The only dependency is Nate Finch's lumberjack (MIT License).  The import is still `gopkg.in/natefinch/lumberjack.v2`, but the actual location is the v2 branch of https://github.com/natefinch/lumberjack.  The git commit id at time of copy was dd45e6a67c53f673bb49ca8a001fd3a63ceb640e.

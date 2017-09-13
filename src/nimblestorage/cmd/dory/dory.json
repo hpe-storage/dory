@@ -1,0 +1,7 @@
+{
+    "logFilePath": "/var/log/dory.log",
+    "logDebug": false,
+    "stripK8sFromOptions": true,
+    "dockerVolumePluginSocketPath": "/run/docker/plugins/nimble.sock",
+    "createVolumes": true
+}

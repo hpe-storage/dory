@@ -3,4 +3,9 @@
 *.test
 *.out
 
+/pkg/*
+/bin/*
+
 .vscode/*
+
+src/nimblestorage/cmd/dory/dory
