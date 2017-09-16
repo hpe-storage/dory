@@ -23,6 +23,19 @@ The diagram below depicts the process communication on the right and the resulti
 ## Unmount
 The unmount workflow unmounts the bind mount and then uses the Docker Volume Plugin 'unmount' function to unmount and detach the filesystem from the kubelet.
 
+# Building Dory
+Dory is written in Go and requires golang on your machine. The following example installs the necessary tools and builds Dory on a RHEL 7.4 system:
+```
+$ sudo subscription-manager repos --enable=rhel-7-server-optional-rpms
+$ sudo yum install -y golang make
+$ git clone https://github.com/hpe-storage/dory
+$ make gettools
+$ make dory
+```
+You should end up with a `dory` executable in the `./bin` directory and be ready for [installation](#installation).
+
+**Hint:** Go is available through the [EPEL](https://fedoraproject.org/wiki/EPEL) repository for .rpm based distributions and a `golang` package is part of the official Ubuntu repositories.
+
 # Usage
 
 ## Installation
