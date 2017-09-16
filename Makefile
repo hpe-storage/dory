@@ -117,6 +117,6 @@ test: ; $(info $(A1) test)
 dory: bin pkg lint; $(info $(A1) dory)
 	@echo "$(A2) build dory"
 	cd bin && export $(GOENV) $(BUILD_ENV) && go build -ldflags $(LD_FLAGS) ../$(CMD_PATH)dory/dory.go
-	@echo "$(A2) shasum dory"
-	shasum  bin/dory > bin/dory.shasum
-	@cat bin/dory.shasum
+	@echo "$(A2) sha256sum dory"
+	sha256sum  bin/dory > bin/dory.sha256sum
+	@cat bin/dory.sha256sum
