@@ -32,7 +32,7 @@ endif
 
 # The version of make for OSX doesn't allow us to export, so
 # we add these variables to the env in each invocation.
-GOENV = GOPATH=$(GOPATH) PATH=$$PATH:$(GOPATH)
+GOENV = GOPATH=$(GOPATH) PATH=$$PATH:$(GOPATH):bin
 
 # Our target binary is for Linux.  To build an exec for your local (non-linux)
 # machine, use go build directly.
