@@ -88,6 +88,16 @@ func (g *GetResponse) getErr() string {
 	return g.Err
 }
 
+//GetListResponse is returned from the volume driver list request
+type GetListResponse struct {
+	Volumes []DockerVolume `json:"Volumes,omitempty"`
+	Err     string         `json:"Err,omitempty"`
+}
+
+func (g *GetListResponse) getErr() string {
+	return g.Err
+}
+
 //DockerVolume represents the details about a docker volume
 type DockerVolume struct {
 	Name       string                 `json:"Name,omitempty"`
@@ -113,6 +123,30 @@ func Get(name string) (*GetResponse, error) {
 
 	if err = driverErrorCheck(res); err != nil {
 		util.LogInfo.Printf("unable to get docker volume using %s - %s\n", name, err.Error())
+		return nil, err
+	}
+	util.LogDebug.Printf("returning %#v", res)
+	return res, nil
+}
+
+//List the docker volumes returning the response from the driver
+func List() (*GetListResponse, error) {
+	var req = &Request{}
+	var res = &GetListResponse{}
+
+	err := driverRun(&connectivity.Request{
+		Action:        "POST",
+		Path:          ListURI,
+		Payload:       req,
+		Response:      res,
+		ResponseError: res})
+	if err != nil {
+		util.LogInfo.Printf("unable to list docker volumes - %s\n", err.Error())
+		return nil, err
+	}
+
+	if err = driverErrorCheck(res); err != nil {
+		util.LogInfo.Printf("unable to list docker volumes - %s\n", err.Error())
 		return nil, err
 	}
 	util.LogDebug.Printf("returning %#v", res)
