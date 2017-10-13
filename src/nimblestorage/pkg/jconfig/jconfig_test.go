@@ -41,7 +41,7 @@ var basicTests = []struct {
 }
 
 func TestBasic(t *testing.T) {
-	err := FileLoadConfig("./test.json")
+	c, err := NewConfig("./test.json")
 	if err != nil {
 		t.Error(
 			"For file load of ./test.json",
@@ -52,15 +52,15 @@ func TestBasic(t *testing.T) {
 
 	for _, tc := range basicTests {
 		t.Run(tc.name, func(t *testing.T) {
-			s := GetString(tc.testKey)
+			s := c.GetString(tc.testKey)
 			if s != tc.resultString {
 				t.Fatalf("%s: GetString(%v) should return %v; got %v", tc.name, tc.testKey, tc.resultString, s)
 			}
-			i := GetInt64(tc.testKey)
+			i := c.GetInt64(tc.testKey)
 			if i != tc.resultInt {
 				t.Fatalf("%s: GetInt64(%v) should return %v; got %v", tc.name, tc.testKey, tc.resultInt, i)
 			}
-			ss := GetStringSlice(tc.testKey)
+			ss := c.GetStringSlice(tc.testKey)
 			if ss != nil && tc.resultStringSlice != nil {
 				for x := range tc.resultStringSlice {
 					if ss[x] != tc.resultStringSlice[x] {
@@ -68,7 +68,7 @@ func TestBasic(t *testing.T) {
 					}
 				}
 			}
-			b, _ := GetBool(tc.testKey)
+			b, _ := c.GetBool(tc.testKey)
 			if b != tc.resultBool {
 				t.Fatalf("%s: GetBool(%v) should return %v; got %v", tc.name, tc.testKey, tc.resultBool, b)
 			}
@@ -77,14 +77,14 @@ func TestBasic(t *testing.T) {
 }
 
 func TestBroken(t *testing.T) {
-	err := FileLoadConfig("./broken.json")
+	_, err := NewConfig("./broken.json")
 	if err == nil {
 		t.Errorf("%s: FileLoadConfig(./broken.json) should get error.", "TestBroken")
 	}
 }
 
 func TestFNF(t *testing.T) {
-	err := FileLoadConfig("./missing.json")
+	_, err := NewConfig("./missing.json")
 	if err == nil {
 		t.Errorf("%s: FileLoadConfig(./missing.json) should get error.", "TestFNF")
 	}

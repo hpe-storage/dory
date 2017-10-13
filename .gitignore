@@ -1,11 +1,14 @@
 .DS_Store
+*.swp
 
 *.test
 *.out
 
 /pkg/*
 /bin/*
+/src/github.com/*
 
 .vscode/*
 
 src/nimblestorage/cmd/dory/dory
+src/nimblestorage/vendor/*

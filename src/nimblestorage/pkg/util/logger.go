@@ -72,6 +72,20 @@ func OpenLogFile(filePath string, maxSizeMB int, maxFiles int, maxAgeDays int, d
 	return nil
 }
 
+//OpenLog causes logging to happen to stdout
+func OpenLog(debug bool) error {
+	stdLog := log.New(os.Stdout, "", log.Ltime|log.Lshortfile)
+
+	if debug {
+		LogDebug = stdLog
+	} else {
+		LogDebug = log.New(ioutil.Discard, "", log.Ltime|log.Lshortfile)
+	}
+	LogInfo = stdLog
+	LogError = stdLog
+	return nil
+}
+
 // create dirs if needed
 func pathCheck(filePath string) {
 	dir := filepath.Dir(filePath)
