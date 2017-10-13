@@ -25,7 +25,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 )
 
 const (
@@ -59,6 +58,7 @@ const (
 var (
 	//createVolumes indicate whether the driver should create missing volumes
 	createVolumes = true
+	dvp           *dockervol.DockerVolumePlugin
 )
 
 // Response containers the required information for each invocation
@@ -93,8 +93,7 @@ func (ar *AttachRequest) getBestName() string {
 // Config controls the docker behavior
 // If this gets anymore complicated we'll use a struct here
 func Config(socket string, stripK8sNs, createVols bool) {
-	dockervol.SocketPath = socket
-	dockervol.StripK8sFromOptions = stripK8sNs
+	dvp = dockervol.NewDockerVolumePlugin(socket, stripK8sNs)
 	createVolumes = createVols
 }
 
@@ -161,20 +160,20 @@ func Attach(jsonRequest string) (string, error) {
 
 func getOrCreate(name, jsonRequest string) (string, error) {
 	util.LogDebug.Printf("getOrCreate called with %s and %s\n", name, jsonRequest)
-	volume, err := dockervol.Get(name)
-	if err != nil {
-		if !createVolumes || !strings.HasPrefix(err.Error(), dockervol.NotFound) {
-			return "", err
+	volume, err := dvp.Get(name)
+	if err != nil || volume.Volume.Name != name {
+		if !createVolumes {
+			return "", fmt.Errorf("configured to NOT create volumes")
 		}
 
-		util.LogInfo.Printf("volume %s was not found, creating a new volume using %v", name, jsonRequest)
+		util.LogInfo.Printf("volume %s was not found(err=%v), creating a new volume using %v", name, err, jsonRequest)
 		var options map[string]interface{}
 		err := json.Unmarshal([]byte(jsonRequest), &options)
 		if err != nil {
 			util.LogError.Printf("unable to unmarshal options for %v - %s", jsonRequest, err.Error())
 			return "", err
 		}
-		newName, err := dockervol.Create(name, options)
+		newName, err := dvp.Create(name, options)
 		util.LogDebug.Printf("getOrCreate returning %v for %s", newName, name)
 		if err != nil {
 			return "", err
@@ -210,7 +209,7 @@ func Mount(args []string) (string, error) {
 		return "", err
 	}
 
-	path, err := dockervol.Mount(req.getBestName(), mountID)
+	path, err := dvp.Mount(req.getBestName(), mountID)
 	if err != nil {
 		return "", err
 	}
@@ -263,12 +262,15 @@ func Unmount(args []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	util.LogDebug.Printf("%s was mounted on %s", args[0], dockerPath)
-	dockerVolumeName := filepath.Base(dockerPath)
+
+	dockerVolumeName, err := getVolumeNameFromMountPath(args[0], dockerPath)
+	if err != nil {
+		return "", err
+	}
 
 	util.LogDebug.Printf("docker unmount of %s %s\n", dockerVolumeName, mountID)
-	err = dockervol.Unmount(dockerVolumeName, mountID)
+	err = dvp.Unmount(dockerVolumeName, mountID)
 	if err != nil {
 		return "", err
 	}
@@ -286,6 +288,29 @@ func getMountID(path string) (string, error) {
 	util.LogDebug.Printf("getMountID returning \"%s\"", groups[1])
 	return groups[1], nil
 
+}
+
+func getVolumeNameFromMountPath(k8sPath, dockerPath string) (string, error) {
+	util.LogDebug.Printf("getVolumeNameFromMountPath called with %s and %s", k8sPath, dockerPath)
+	name := filepath.Base(dockerPath)
+	dockerVolume, err := dvp.Get(name)
+	if err != nil || dockerVolume.Volume.Name != name {
+		// The docker plugin might not use the docker volume name in the path.
+		// Therefore we need to look through the know volumes to find out who
+		// is mounted at that path.
+		volumes, err2 := dvp.List()
+		if err2 != nil {
+			util.LogError.Printf("Unable to get list of volumes. - %s, get error was %s", err2, err)
+			return "", err
+		}
+		for _, vol := range volumes.Volumes {
+			if vol.Mountpoint == dockerPath {
+				return vol.Name, nil
+			}
+		}
+		return "", fmt.Errorf("unable to find docker volume for %s.  No docker volume claimed to be mounted at %s", k8sPath, dockerPath)
+	}
+	return dockerVolume.Volume.Name, nil
 }
 
 func findJSON(args []string, req *AttachRequest) (string, error) {

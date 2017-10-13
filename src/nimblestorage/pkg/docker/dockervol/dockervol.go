@@ -42,14 +42,15 @@ const (
 	GetURI = "/VolumeDriver.Get"
 	//NotFound describes the beginning of the not found error message
 	NotFound = "Unable to find"
+
+	defaultSocketPath = "/run/docker/plugins/nimble.sock"
 )
 
-var (
-	//SocketPath is the full path to the location of the socket file for the nimble volume plugin
-	SocketPath = "/run/docker/plugins/nimble.sock"
-	//StripK8sFromOptions indicates if k8s namespace should be stripped fromoptions
-	StripK8sFromOptions = true
-)
+//DockerVolumePlugin is the client to a specific docker volume plugin
+type DockerVolumePlugin struct {
+	stripK8sOpts bool
+	client       *connectivity.Client
+}
 
 //Errorer describes the ability get the embedded error
 type Errorer interface {
@@ -88,6 +89,16 @@ func (g *GetResponse) getErr() string {
 	return g.Err
 }
 
+//GetListResponse is returned from the volume driver list request
+type GetListResponse struct {
+	Volumes []DockerVolume `json:"Volumes,omitempty"`
+	Err     string         `json:"Err,omitempty"`
+}
+
+func (g *GetListResponse) getErr() string {
+	return g.Err
+}
+
 //DockerVolume represents the details about a docker volume
 type DockerVolume struct {
 	Name       string                 `json:"Name,omitempty"`
@@ -95,12 +106,25 @@ type DockerVolume struct {
 	Status     map[string]interface{} `json:"Status,omitempty"`
 }
 
+// NewDockerVolumePlugin creates a DockerVolumePlugin which can be used to communicate with
+// a Docker Volume Plugin.  socketPath is the full path to the location of the socket file for the nimble volume plugin.
+// stripK8sFromOptions indicates if k8s namespace should be stripped fromoptions.
+func NewDockerVolumePlugin(socketPath string, stripK8sFromOptions bool) *DockerVolumePlugin {
+	if socketPath == "" {
+		socketPath = defaultSocketPath
+	}
+	return &DockerVolumePlugin{
+		stripK8sOpts: stripK8sFromOptions,
+		client:       connectivity.NewSocketClient(socketPath),
+	}
+}
+
 //Get a docker volume by docker name returning the response from the driver
-func Get(name string) (*GetResponse, error) {
+func (dvp *DockerVolumePlugin) Get(name string) (*GetResponse, error) {
 	var req = &Request{Name: name}
 	var res = &GetResponse{}
 
-	err := driverRun(&connectivity.Request{
+	err := dvp.driverRun(&connectivity.Request{
 		Action:        "POST",
 		Path:          GetURI,
 		Payload:       req,
@@ -119,20 +143,44 @@ func Get(name string) (*GetResponse, error) {
 	return res, nil
 }
 
+//List the docker volumes returning the response from the driver
+func (dvp *DockerVolumePlugin) List() (*GetListResponse, error) {
+	var req = &Request{}
+	var res = &GetListResponse{}
+
+	err := dvp.driverRun(&connectivity.Request{
+		Action:        "POST",
+		Path:          ListURI,
+		Payload:       req,
+		Response:      res,
+		ResponseError: res})
+	if err != nil {
+		util.LogInfo.Printf("unable to list docker volumes - %s\n", err.Error())
+		return nil, err
+	}
+
+	if err = driverErrorCheck(res); err != nil {
+		util.LogInfo.Printf("unable to list docker volumes - %s\n", err.Error())
+		return nil, err
+	}
+	util.LogDebug.Printf("returning %#v", res)
+	return res, nil
+}
+
 //Create a docker volume returning the docker volume name
-func Create(name string, options map[string]interface{}) (string, error) {
+func (dvp *DockerVolumePlugin) Create(name string, options map[string]interface{}) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("name is required")
 	}
 	for key := range options {
-		if key == "name" || (StripK8sFromOptions && strings.HasPrefix(key, "kubernetes.io")) {
+		if key == "name" || (dvp.stripK8sOpts && strings.HasPrefix(key, "kubernetes.io")) {
 			delete(options, key)
 		}
 	}
 	var req = &Request{Name: name, Opts: options}
 	var res = &GetResponse{}
 
-	err := driverRun(&connectivity.Request{
+	err := dvp.driverRun(&connectivity.Request{
 		Action:        "POST",
 		Path:          CreateURI,
 		Payload:       req,
@@ -152,8 +200,8 @@ func Create(name string, options map[string]interface{}) (string, error) {
 }
 
 //Mount attaches and mounts a nimble volume returning the path
-func Mount(name, mountID string) (string, error) {
-	m, err := mounter(name, mountID, MountURI)
+func (dvp *DockerVolumePlugin) Mount(name, mountID string) (string, error) {
+	m, err := dvp.mounter(name, mountID, MountURI)
 	if err != nil {
 		return "", err
 	}
@@ -161,22 +209,49 @@ func Mount(name, mountID string) (string, error) {
 }
 
 //Unmount unmounts and detaches nimble volume
-func Unmount(name, mountID string) error {
-	_, err := mounter(name, mountID, UnmountURI)
+func (dvp *DockerVolumePlugin) Unmount(name, mountID string) error {
+	_, err := dvp.mounter(name, mountID, UnmountURI)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func mounter(name, mountID string, path string) (string, error) {
+//Delete calls the delete function of the plugin
+func (dvp *DockerVolumePlugin) Delete(name string) error {
+	if name == "" {
+		return fmt.Errorf("name is required")
+	}
+	var req = &Request{Name: name}
+	var res = &GetResponse{}
+
+	err := dvp.driverRun(&connectivity.Request{
+		Action:        "POST",
+		Path:          RemoveURI,
+		Payload:       req,
+		Response:      res,
+		ResponseError: res})
+	if err != nil {
+		util.LogError.Printf("%s failed %v - %s\n", RemoveURI, name, err.Error())
+		return err
+	}
+
+	if err = driverErrorCheck(res); err != nil {
+		util.LogError.Printf("%s failed %v - %s\n", RemoveURI, name, err.Error())
+		return err
+	}
+
+	return nil
+}
+
+func (dvp *DockerVolumePlugin) mounter(name, mountID string, path string) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("name is required")
 	}
 	var req = &MountRequest{Name: name, ID: mountID}
 	var res = &MountResponse{}
 
-	err := driverRun(&connectivity.Request{
+	err := dvp.driverRun(&connectivity.Request{
 		Action:        "POST",
 		Path:          path,
 		Payload:       req,
@@ -195,12 +270,8 @@ func mounter(name, mountID string, path string) (string, error) {
 	return res.Mountpoint, nil
 }
 
-func newDockerVolumeClient() *connectivity.Client {
-	return connectivity.NewSocketClient(SocketPath)
-}
-
-func driverRun(r *connectivity.Request) error {
-	return newDockerVolumeClient().DoJSON(r)
+func (dvp *DockerVolumePlugin) driverRun(r *connectivity.Request) error {
+	return dvp.client.DoJSON(r)
 }
 
 func driverErrorCheck(e Errorer) error {
