@@ -18,12 +18,17 @@ package provisioner
 
 import (
 	"fmt"
+	uuid "github.com/satori/go.uuid"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	core_v1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/pkg/api/v1"
 	api_v1 "k8s.io/client-go/pkg/api/v1"
 	storage_v1 "k8s.io/client-go/pkg/apis/storage/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/record"
 	"nimblestorage/pkg/chain"
 	"nimblestorage/pkg/docker/dockervol"
 	"nimblestorage/pkg/jconfig"
@@ -44,7 +49,7 @@ const (
 var (
 	// resyncPeriod describes how often to get a full resync (0=never)
 	resyncPeriod   = 15 * time.Minute
-	maxWaitForBind = 5 * time.Minute
+	maxWaitForBind = 5 * time.Second
 )
 
 // Provisioner provides dynamic pvs based on pvcs and storage classes.
@@ -59,6 +64,7 @@ type Provisioner struct {
 	affectDockerVols        bool
 	namePrefix              string
 	dockerVolNameAnnotation string
+	eventRecorder           record.EventRecorder
 }
 
 // addClaimChan adds a chan to the map index by claim id
@@ -92,6 +98,10 @@ func (p *Provisioner) removeClaimChan(claimID string) {
 
 //NewProvisioner provides a Provisioner for a k8s cluster
 func NewProvisioner(clientSet *kubernetes.Clientset, provisionerName string, affectDockerVols bool) *Provisioner {
+	id := uuid.NewV4()
+	broadcaster := record.NewBroadcaster()
+	broadcaster.StartRecordingToSink(&core_v1.EventSinkImpl{Interface: clientSet.Core().Events(v1.NamespaceAll)})
+	util.LogDebug.Printf("provisioner (prefix=%s) is being created with instance id %s.", provisionerName, id.String())
 	return &Provisioner{
 		kubeClient:              clientSet,
 		claim2chan:              make(map[string]chan *api_v1.PersistentVolumeClaim, 10),
@@ -99,6 +109,7 @@ func NewProvisioner(clientSet *kubernetes.Clientset, provisionerName string, aff
 		affectDockerVols:        affectDockerVols,
 		namePrefix:              provisionerName + "/",
 		dockerVolNameAnnotation: provisionerName + "/" + dockerVolumeName,
+		eventRecorder:           broadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: fmt.Sprintf("%s-%s", provisionerName, id.String())}),
 	}
 }
 
@@ -138,11 +149,14 @@ func (p *Provisioner) deleteVolume(pv *api_v1.PersistentVolume, rmPV bool) {
 	if p.affectDockerVols {
 		dockerClient, err := p.newDockerClient(provisioner)
 		if err != nil {
-			//TODO send event
+			info := fmt.Sprintf("failed to get docker client for %s while trying to delete pv %s: %v", provisioner, pv.Name, err)
+			util.LogError.Print(info)
+			p.eventRecorder.Event(pv, api_v1.EventTypeWarning, "DeleteVolumeGetClient", info)
 			return
 		}
 		vol := p.getDockerVolume(dockerClient, pv.Name)
 		if vol != nil && vol.Name == pv.Name {
+			p.eventRecorder.Event(pv, api_v1.EventTypeNormal, "DeleteVolume", fmt.Sprintf("cleaning up volume named %s", pv.Name))
 			util.LogDebug.Printf("Docker volume with name %s found.  Delete using %s.", pv.Name, provisioner)
 			deleteChain.AppendRunner(&deleteDockerVol{
 				name:   pv.Name,
@@ -161,8 +175,8 @@ func (p *Provisioner) deleteVolume(pv *api_v1.PersistentVolume, rmPV bool) {
 	err := deleteChain.Execute()
 
 	if err != nil {
-		//TODO send event
-		util.LogError.Printf("error deleting %v. err=%v", pv, err)
+		p.eventRecorder.Event(pv, api_v1.EventTypeWarning, "DeleteVolume",
+			fmt.Sprintf("Failed to delete volume for pv %s: %v", pv.Name, err))
 	}
 
 }
@@ -194,7 +208,9 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, updat
 		var dockerClient *dockervol.DockerVolumePlugin
 		dockerClient, err = p.newDockerClient(class.Provisioner)
 		if err != nil {
-			//TODO send event
+			util.LogError.Printf("unable to get docker client for class %v while trying to provision pvc named %s: %s", class, claim.Name, err)
+			p.eventRecorder.Event(claim, api_v1.EventTypeWarning, "ProvisionVolumeGetClient",
+				fmt.Sprintf("failed to get docker volume client for class %s while trying to provision claim %s: %s", class.Name, claim.Name, err))
 			return
 		}
 		vol := p.getDockerVolume(dockerClient, volName)
@@ -219,13 +235,15 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, updat
 		updateChan: updates,
 		origClaim:  claim,
 		pChain:     provisionChain,
+		p:          p,
 	})
 
+	p.eventRecorder.Event(claim, api_v1.EventTypeNormal, "ProvisionStorage", fmt.Sprintf("%s provisioning storage for claim %s using class %s", class.Provisioner, claim.Name, class.Name))
 	err = provisionChain.Execute()
 
 	if err != nil {
-		//TODO send event
-		util.LogError.Printf("error provisioning pv from %v and %v. err=%v", claim, class, err)
+		p.eventRecorder.Event(claim, api_v1.EventTypeWarning, "ProvisionStorage",
+			fmt.Sprintf("failed to create volume for claim %s with class %s: %s", claim.Name, class.Name, err))
 	}
 
 }
@@ -363,6 +381,7 @@ type monitorBind struct {
 	updateChan chan *api_v1.PersistentVolumeClaim
 	origClaim  *api_v1.PersistentVolumeClaim
 	pChain     *chain.Chain
+	p          *Provisioner
 }
 
 func (m *monitorBind) Name() string {
@@ -378,17 +397,25 @@ func (m *monitorBind) Run() (name interface{}, err error) {
 				util.LogDebug.Printf("pvc %s is bound to pv %s", claim.Name, claim.Spec.VolumeName)
 				vol, err := getPersistentVolume(m.pChain.GetRunnerOutput("createPersistentVolume"))
 				if err != nil {
-					//TODO sent event
+					util.LogError.Printf("unable to get volume for pvc %s waiting for bind status (UID=%s)", m.origClaim.Name, m.origClaim.GetUID())
 					return nil, err
 				}
 				if vol.Name != claim.Spec.VolumeName {
-					//TODO sent event
-					return nil, fmt.Errorf("pvc %s was satisfied by %s, the pv provisioned was %s", claim.Name, claim.Spec.VolumeName, vol.Name)
+					info := fmt.Sprintf("pvc %s was satisfied by %s, the pv provisioned was %s", claim.Name, claim.Spec.VolumeName, vol.Name)
+					m.p.eventRecorder.Event(claim, api_v1.EventTypeNormal, "MonitorBind", info)
+					return nil, fmt.Errorf("%s", info)
 				}
 				return claim.Spec.VolumeName, nil
+			} else if claim.Status.Phase == api_v1.ClaimLost {
+				info := fmt.Sprintf("pvc %s was lost, reverting volume create (UID=%s)", m.origClaim.Name, m.origClaim.UID)
+				util.LogError.Print(info)
+				m.p.eventRecorder.Event(m.origClaim, api_v1.EventTypeWarning, "MonitorBind", info)
+				return nil, fmt.Errorf("pvc %s was lost, reverting volume create (UID=%s)", m.origClaim.Name, m.origClaim.GetUID())
 			}
 		case <-time.After(maxWaitForBind):
-			util.LogError.Printf("pvc %s timed out waiting for bind status (UID=%s)", m.origClaim.Name, m.origClaim.GetUID())
+			info := fmt.Sprintf("pvc %s timed out waiting for bind status, reverting volume create (UID=%s)", m.origClaim.Name, m.origClaim.UID)
+			util.LogError.Print(info)
+			m.p.eventRecorder.Event(m.origClaim, api_v1.EventTypeWarning, "MonitorBind", info)
 			return nil, fmt.Errorf("pvc %s (%s) not bound after timeout", m.origClaim.Name, m.origClaim.GetUID())
 		}
 	}

@@ -1,5 +1,7 @@
 package: nimblestorage
 import:
+- package: github.com/satori/go.uuid
+  version: ~1.1.0
 - package: gopkg.in/natefinch/lumberjack.v2
   version: ~2.1.0
 - package: k8s.io/apimachinery
@@ -13,9 +15,11 @@ import:
   subpackages:
   - kubernetes
   - kubernetes/scheme
+  - kubernetes/typed/core/v1
   - pkg/api/v1
   - pkg/api/v1/ref
   - pkg/apis/storage/v1
   - pkg/apis/storage/v1beta1
   - tools/cache
   - tools/clientcmd
+  - tools/record

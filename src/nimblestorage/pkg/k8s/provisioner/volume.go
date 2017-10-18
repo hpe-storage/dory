@@ -61,29 +61,26 @@ func (p *Provisioner) newVolumeController() cache.Controller {
 func (p *Provisioner) addedVolume(t interface{}) {
 	vol, err := getPersistentVolume(t)
 	if err != nil {
-		//TODO send event
 		util.LogError.Printf("unable to process pv add - %v,  %s", t, err.Error())
 	}
-	p.processVolEvent("added", vol, true)
+	go p.processVolEvent("added", vol, true)
 }
 
 func (p *Provisioner) updatedVolume(oldT interface{}, newT interface{}) {
 	vol, err := getPersistentVolume(newT)
 	if err != nil {
-		//TODO send event
 		util.LogError.Printf("unable to process pv update - %v,  %s", newT, err.Error())
 	}
 
-	p.processVolEvent("updatedVol", vol, true)
+	go p.processVolEvent("updatedVol", vol, true)
 }
 
 func (p *Provisioner) deletedVolume(t interface{}) {
 	vol, err := getPersistentVolume(t)
 	if err != nil {
-		//TODO send event
 		util.LogError.Printf("unable to process pv delete - %v,  %s", t, err.Error())
 	}
-	p.processVolEvent("deletedVol", vol, false)
+	go p.processVolEvent("deletedVol", vol, false)
 }
 
 // We map updated and deleted events here incase we were not running when the pv state changed to Released.  If rmPV is true, we try to remove the pv object from the cluster.  If its false, we don't.

@@ -57,11 +57,13 @@ func (p *Provisioner) newClaimController() cache.Controller {
 func (p *Provisioner) addedClaim(t interface{}) {
 	claim, err := getPersistentVolumeClaim(t)
 	if err != nil {
-		//TODO send event
-		util.LogError.Printf("unable to process new claim - %v,  %s", t, err.Error())
+		util.LogError.Printf("Failed to get persistent volume claim from %v, %s", t, err.Error())
 		return
 	}
+	go p.processAddedClaim(claim)
+}
 
+func (p *Provisioner) processAddedClaim(claim *api_v1.PersistentVolumeClaim) {
 	// is this a state we can do anything about
 	if claim.Status.Phase != api_v1.ClaimPending {
 		util.LogInfo.Printf("pvc %s was not in pending phase.  current phase=%s - skipping", claim.Name, claim.Status.Phase)
@@ -72,7 +74,6 @@ func (p *Provisioner) addedClaim(t interface{}) {
 	className := getClaimClassName(claim)
 	class, err := p.getClass(className)
 	if err != nil {
-		//TODO send event
 		util.LogError.Printf("error getting class named %s for pvc %s. err=%v", className, claim.Name, err)
 		return
 	}
@@ -81,22 +82,26 @@ func (p *Provisioner) addedClaim(t interface{}) {
 		return
 	}
 
-	//TODO find dory path
-
-	util.LogDebug.Printf("addedClaim event: provisioner:%s pvc:%s  class:%s", class.Provisioner, claim.Name, className)
+	util.LogInfo.Printf("processAddedClaim: provisioner:%s pvc:%s  class:%s", class.Provisioner, claim.Name, className)
 	p.addClaimChan(fmt.Sprintf("%s", claim.GetUID()), make(chan *api_v1.PersistentVolumeClaim))
-	go p.provisionVolume(claim, p.getClaimChan(fmt.Sprintf("%s", claim.GetUID())), class)
+	p.provisionVolume(claim, p.getClaimChan(fmt.Sprintf("%s", claim.UID)), class)
 }
 
 func (p *Provisioner) updatedClaim(oldT interface{}, newT interface{}) {
 	claim, err := getPersistentVolumeClaim(newT)
 	if err != nil {
 		util.LogError.Printf("Oops - %s\n", err.Error())
+		return
 	}
-	util.LogDebug.Printf("updatedClaim event: pvc:%s phase:%s", claim.Name, claim.Status.Phase)
+	go p.processUpdatedClaim(claim)
+}
+
+func (p *Provisioner) processUpdatedClaim(claim *api_v1.PersistentVolumeClaim) {
+	util.LogDebug.Printf("processUpdatedClaim: pvc:%s phase:%s", claim.Name, claim.Status.Phase)
 	claimUpdateChan := p.getClaimChan(fmt.Sprintf("%s", claim.GetUID()))
 	if claimUpdateChan == nil {
-		util.LogDebug.Printf("updatedClaim event: skipping pvc:%s phase:%s, not in map", claim.Name, claim.Status.Phase)
+		util.LogDebug.Printf("processUpdatedClaim: skipping pvc:%s (%s) phase:%s, not in map", claim.Name, claim.UID, claim.Status.Phase)
+		return
 	}
 	claimUpdateChan <- claim
 }
