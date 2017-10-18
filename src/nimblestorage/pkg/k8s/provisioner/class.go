@@ -44,21 +44,23 @@ func (p *Provisioner) watchBetaAllClasses(options meta_v1.ListOptions) (watch.In
 
 //NewClassReflector provides a controller that watches for PersistentVolumeClasss and takes action on them
 func (p *Provisioner) newClassReflector(kubeClient *kubernetes.Clientset) (cache.Store, *cache.Reflector) {
+	classStore := cache.NewStore(cache.DeletionHandlingMetaNamespaceKeyFunc)
+	var classReflector *cache.Reflector
 	// In 1.6 and above classes are out of beta
 	classListWatch := &cache.ListWatch{
 		ListFunc:  p.listAllClasses,
 		WatchFunc: p.watchAllClasses,
 	}
+	classReflector = cache.NewReflector(classListWatch, &storage_v1.StorageClass{}, classStore, 0)
+
 	// if we're dealing with 1.5, classes are still in beta
 	if p.serverVersion.Major == "1" && p.serverVersion.Minor == "5" {
 		classListWatch = &cache.ListWatch{
 			ListFunc:  p.listBetaAllClasses,
 			WatchFunc: p.watchBetaAllClasses,
 		}
+		classReflector = cache.NewReflector(classListWatch, &storage_v1beta1.StorageClass{}, classStore, 0)
 	}
-
-	classStore := cache.NewStore(cache.DeletionHandlingMetaNamespaceKeyFunc)
-	classReflector := cache.NewReflector(classListWatch, &storage_v1.StorageClass{}, classStore, 0)
 
 	return classStore, classReflector
 }
