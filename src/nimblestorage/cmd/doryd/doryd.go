@@ -51,7 +51,7 @@ func main() {
 	util.OpenLog(true)
 
 	stop := make(chan struct{})
-	p := provisioner.NewProvisioner(kubeClient, provisionerName, true)
+	p := provisioner.NewProvisioner(kubeClient, provisionerName, true, true)
 	p.Start(stop)
 	<-stop
 

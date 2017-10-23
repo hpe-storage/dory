@@ -83,8 +83,8 @@ func (p *Provisioner) processAddedClaim(claim *api_v1.PersistentVolumeClaim) {
 	}
 
 	util.LogInfo.Printf("processAddedClaim: provisioner:%s pvc:%s  class:%s", class.Provisioner, claim.Name, className)
-	p.addClaimChan(fmt.Sprintf("%s", claim.GetUID()), make(chan *api_v1.PersistentVolumeClaim))
-	p.provisionVolume(claim, p.getClaimChan(fmt.Sprintf("%s", claim.UID)), class)
+	p.addMessageChan(fmt.Sprintf("%s", claim.UID), nil)
+	p.provisionVolume(claim, class)
 }
 
 func (p *Provisioner) updatedClaim(oldT interface{}, newT interface{}) {
@@ -93,17 +93,8 @@ func (p *Provisioner) updatedClaim(oldT interface{}, newT interface{}) {
 		util.LogError.Printf("Oops - %s\n", err.Error())
 		return
 	}
-	go p.processUpdatedClaim(claim)
-}
-
-func (p *Provisioner) processUpdatedClaim(claim *api_v1.PersistentVolumeClaim) {
-	util.LogDebug.Printf("processUpdatedClaim: pvc:%s phase:%s", claim.Name, claim.Status.Phase)
-	claimUpdateChan := p.getClaimChan(fmt.Sprintf("%s", claim.GetUID()))
-	if claimUpdateChan == nil {
-		util.LogDebug.Printf("processUpdatedClaim: skipping pvc:%s (%s) phase:%s, not in map", claim.Name, claim.UID, claim.Status.Phase)
-		return
-	}
-	claimUpdateChan <- claim
+	util.LogDebug.Printf("updatedClaim: pvc %s current phase=%s", claim.Name, claim.Status.Phase)
+	go p.sendUpdate(claim)
 }
 
 func getClaimClassName(claim *api_v1.PersistentVolumeClaim) (name string) {

@@ -85,6 +85,9 @@ func (p *Provisioner) deletedVolume(t interface{}) {
 
 // We map updated and deleted events here incase we were not running when the pv state changed to Released.  If rmPV is true, we try to remove the pv object from the cluster.  If its false, we don't.
 func (p *Provisioner) processVolEvent(event string, vol *api_v1.PersistentVolume, rmPV bool) {
+	//notify the monitor
+	go p.sendUpdate(vol)
+
 	if vol.Status.Phase != api_v1.VolumeReleased || vol.Spec.PersistentVolumeReclaimPolicy != api_v1.PersistentVolumeReclaimDelete {
 		util.LogInfo.Printf("%s event: pv:%s phase:%v (reclaim policy:%v) - skipping", event, vol.Name, vol.Status.Phase, vol.Spec.PersistentVolumeReclaimPolicy)
 		return
