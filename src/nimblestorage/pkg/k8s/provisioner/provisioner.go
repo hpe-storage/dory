@@ -72,7 +72,6 @@ type Provisioner struct {
 	classStore              cache.Store
 	id2chan                 map[string]chan *updateMessage
 	id2chanLock             *sync.Mutex
-	id2chanDeleteLock       *sync.Mutex
 	affectDockerVols        bool
 	namePrefix              string
 	dockerVolNameAnnotation string
@@ -135,14 +134,10 @@ func (p *Provisioner) sendUpdate(t interface{}) {
 		}
 	}
 
-	// hold the delete lock until we dispatch the message
-	p.id2chanDeleteLock.Lock()
-	defer p.id2chanDeleteLock.Unlock()
-
-	// hold the big lock just to get the channel
+	// hold the big lock just to send
+	defer p.id2chanLock.Unlock()
 	p.id2chanLock.Lock()
 	messChan := p.id2chan[id]
-	p.id2chanLock.Unlock()
 
 	if messChan == nil {
 		util.LogDebug.Printf("send: skipping %s, not in map", id)
@@ -170,9 +165,6 @@ func (p *Provisioner) removeMessageChan(claimID string, volID string) {
 		return
 	}
 
-	p.id2chanDeleteLock.Lock()
-	defer p.id2chanDeleteLock.Unlock()
-
 	select {
 	case <-messChan:
 	default:
@@ -190,7 +182,6 @@ func NewProvisioner(clientSet *kubernetes.Clientset, provisionerName string, aff
 		kubeClient:              clientSet,
 		id2chan:                 make(map[string]chan *updateMessage, 100),
 		id2chanLock:             &sync.Mutex{},
-		id2chanDeleteLock:       &sync.Mutex{},
 		affectDockerVols:        affectDockerVols,
 		namePrefix:              provisionerName + "/",
 		dockerVolNameAnnotation: provisionerName + "/" + dockerVolumeName,
@@ -237,6 +228,7 @@ func (p *Provisioner) statusLogger() {
 		_, err := p.kubeClient.Discovery().ServerVersion()
 		if err != nil {
 			util.LogError.Printf("statusLogger: provision chains=%d, delete chains=%d, parked chains=%d, ids tracked=%d, connection error=%s", atomic.LoadUint32(&p.provisionCommandChains), atomic.LoadUint32(&p.deleteCommandChains), atomic.LoadUint32(&p.parkedCommands), len(p.id2chan), err.Error())
+			return
 		}
 		util.LogInfo.Printf("statusLogger: provision chains=%d, delete chains=%d, parked chains=%d, ids tracked=%d, connection=valid", atomic.LoadUint32(&p.provisionCommandChains), atomic.LoadUint32(&p.deleteCommandChains), atomic.LoadUint32(&p.parkedCommands), len(p.id2chan))
 	}
