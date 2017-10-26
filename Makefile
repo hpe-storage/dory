@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-VERSION = 1.0.0
+VERSION = 1.1.0
 
 # Where our code lives
 PKG_PATH = src/nimblestorage/pkg/
@@ -32,7 +32,7 @@ endif
 
 # The version of make for OSX doesn't allow us to export, so
 # we add these variables to the env in each invocation.
-GOENV = GOPATH=$(GOPATH) PATH=$$PATH:$(GOPATH):bin
+GOENV = GOPATH=$(GOPATH) PATH=$$PATH:$(GOPATH)/bin
 
 # Our target binary is for Linux.  To build an exec for your local (non-linux)
 # machine, use go build directly.
@@ -64,11 +64,13 @@ A3 = $(shell printf "»»»")
 help:
 	@echo "Targets:"
 	@echo "    gettools       - Download and install go tooling required to build."
+	@echo "    vendor         - Download dependancies."
 	@echo "    lint           - Static analysis of source code.  Note that this must pass in order to build."
 	@echo "    test           - Run unit tests."
 	@echo "    clean          - Remove bin and pkg."
 	@echo "    debug          - Display make's view of the world."
-	@echo "    dory           - Build dory."
+	@echo "    dory           - Build dory (FlexVolume driver)."
+	@echo "    doryd          - Build doryd (Provisioner)."
 
 .PHONY: debug
 debug:
@@ -81,12 +83,19 @@ debug:
 	@echo "    BUILD_ENV: $(BUILD_ENV)"
 	@echo "    GOENV:     $(GOENV)"
 
-.PHONY: gettools
 gettools: ; $(info $(A1) gettools)
 	@echo "$(A2) get gometalinter"
 	export $(GOENV) && go get -u github.com/alecthomas/gometalinter
 	@echo "$(A2) install gometalinter"
 	export $(GOENV) && gometalinter --install
+	@echo "$(A2) get glide"
+	export $(GOENV) && go get -u github.com/Masterminds/glide
+	export $(GOENV) && go install github.com/Masterminds/glide
+
+.PHONY: vendor
+vendor: gettools; $(info $(A1) vendor)
+	@echo "$(A2) glide install"
+	export $(GOENV) && cd src/nimblestorage && glide install
 
 .PHONY: lint
 lint: ; $(info $(A1) lint)
@@ -120,3 +129,10 @@ dory: bin pkg lint; $(info $(A1) dory)
 	@echo "$(A2) sha256sum dory"
 	sha256sum  bin/dory > bin/dory.sha256sum
 	@cat bin/dory.sha256sum
+
+doryd: bin pkg lint; $(info $(A1) dory)
+	@echo "$(A2) build doryd"
+	cd bin && export $(GOENV) $(BUILD_ENV) && go build -ldflags $(LD_FLAGS) ../$(CMD_PATH)doryd/doryd.go
+	@echo "$(A2) sha256sum doryd"
+	sha256sum  bin/doryd > bin/doryd.sha256sum
+	@cat bin/doryd.sha256sum

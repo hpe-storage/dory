@@ -64,30 +64,31 @@ func initialize() bool {
 	override := false
 
 	// don't log anything in initialize because we haven't open a log file yet.
-	if err := jconfig.FileLoadConfig(fmt.Sprintf("%s%s", os.Args[0], ".json")); err != nil {
+	c, err := jconfig.NewConfig(fmt.Sprintf("%s%s", os.Args[0], ".json"))
+	if err != nil {
 		return false
 	}
-	s, err := jconfig.GetStringWithError("logFilePath")
+	s, err := c.GetStringWithError("logFilePath")
 	if err == nil && s != "" {
 		override = true
 		logFilePath = s
 	}
-	s, err = jconfig.GetStringWithError("dockerVolumePluginSocketPath")
+	s, err = c.GetStringWithError("dockerVolumePluginSocketPath")
 	if err == nil && s != "" {
 		override = true
 		dockerVolumePluginSocketPath = s
 	}
-	b, err := jconfig.GetBool("logDebug")
+	b, err := c.GetBool("logDebug")
 	if err == nil {
 		override = true
 		debug = b
 	}
-	b, err = jconfig.GetBool("stripK8sFromOptions")
+	b, err = c.GetBool("stripK8sFromOptions")
 	if err == nil {
 		override = true
 		stripK8sFromOptions = b
 	}
-	b, err = jconfig.GetBool("createVolumes")
+	b, err = c.GetBool("createVolumes")
 	if err == nil {
 		override = true
 		createVolumes = b
