@@ -4,7 +4,9 @@ Dory
 
 Dory is a driver for the [Kubernetes Flexvolume](https://github.com/kubernetes/community/blob/master/contributors/devel/flexvolume.md) Volume type. This driver translates Flexvolume requests to [Docker Volume Plugin](https://docs.docker.com/engine/extend/plugins_volume/) requests. This allows the administrator to leverage [existing Docker Volume Plugins](https://docs.docker.com/engine/extend/legacy_plugins/) in a Kubernetes cluster. Dory provides the ability to 'just in time' provision storage as well as have the orchestrator automatically attach/mount and detach/unmount Persistent Volumes.
 
-Why is this called Dory? Because [Dory speaks whale](https://www.google.com/search?q=Dory+speaks+whale).
+Doryd is a implementation of the [Out-of-tree provisioner](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/storage/volume-provisioning.md) that dynamically provisions persistent storage using the [Docker Volume Plugin](https://docs.docker.com/engine/extend/plugins_volume/).
+
+Why is the project called Dory? Because [Dory speaks whale](https://www.google.com/search?q=Dory+speaks+whale).
 
 What about the [Container Storage Interface](https://github.com/container-storage-interface/)? The CSI is certainly the future for container storage. Dory provides a stop gap while the CSI specification is ratified, orchestrators begin supporting it, and implementations begin to surface.
 
@@ -23,13 +25,15 @@ The diagram below depicts the process communication on the right and the resulti
 ## Unmount
 The unmount workflow unmounts the bind mount and then uses the Docker Volume Plugin 'unmount' function to unmount and detach the filesystem from the kubelet.
 
-# Building Dory
-Dory is written in Go and requires golang on your machine. The following example installs the necessary tools and builds Dory on a RHEL 7.4 system:
+# Building
+Dory is written in Go and requires golang on your machine. The current stable branch is release-1.0.  The following example installs the necessary tools and builds Dory on a RHEL 7.4 system:
 ```
 $ sudo subscription-manager repos --enable=rhel-7-server-optional-rpms
 $ sudo yum install -y golang make
-$ git clone https://github.com/hpe-storage/dory
+$ git clone https://github.com/hpe-storage/dory.git
+$ git checkout release-1.0
 $ make gettools
+$ make vendor
 $ make dory
 ```
 You should end up with a `dory` executable in the `./bin` directory and be ready for [installation](#installation).

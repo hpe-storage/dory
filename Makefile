@@ -64,7 +64,7 @@ A3 = $(shell printf "»»»")
 help:
 	@echo "Targets:"
 	@echo "    gettools       - Download and install go tooling required to build."
-	@echo "    getvendor      - Download dependancies."
+	@echo "    vendor         - Download dependancies."
 	@echo "    lint           - Static analysis of source code.  Note that this must pass in order to build."
 	@echo "    test           - Run unit tests."
 	@echo "    clean          - Remove bin and pkg."
@@ -92,8 +92,8 @@ gettools: ; $(info $(A1) gettools)
 	export $(GOENV) && go get -u github.com/Masterminds/glide
 	export $(GOENV) && go install github.com/Masterminds/glide
 
-.PHONY: getvendor
-getvendor: gettools; $(info $(A1) getvendor)
+.PHONY: vendor
+vendor: gettools; $(info $(A1) vendor)
 	@echo "$(A2) glide install"
 	export $(GOENV) && cd src/nimblestorage && glide install
 
