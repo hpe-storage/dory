@@ -9,6 +9,9 @@ Why is this called Dory? Because [Dory speaks whale](https://www.google.com/sear
 What about the [Container Storage Interface](https://github.com/container-storage-interface/)? The CSI is certainly the future for container storage. Dory provides a stop gap while the CSI specification is ratified, orchestrators begin supporting it, and implementations begin to surface.
 
 # Design
+## Release
+This is release 1.0 which lives in the release-1.0 branch
+
 ## Overview
 In order to provide persistent storage for a Pod, Kubernetes makes a call to Dory via the Flexvolume interface. Dory is an executable placed in a specific directory (see [Installation](#installation)). Dory then communicates with the configured Docker Volume Plugin via a unix socket. Dory then translates the response from the Docker Volume Plugin to the Flexvolume interface. It is important to note that Dory never communicates with the container engine, it communicates directly with the Docker Volume Plugin. This theoretically allows Dory to work with any container engine supported by Kubernetes.
 
