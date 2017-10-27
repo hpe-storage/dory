@@ -19,6 +19,7 @@ package provisioner
 import (
 	"fmt"
 	uuid "github.com/satori/go.uuid"
+	resource_v1 "k8s.io/apimachinery/pkg/api/resource"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
@@ -51,7 +52,9 @@ const (
 	//TODO allow this to be set per docker volume driver
 	maxCreates = 4
 	//TODO allow this to be set per docker volume driver
-	maxDeletes = 4
+	maxDeletes                 = 4
+	defaultfactorForConversion = 1073741824
+	defaultStripValue          = true
 )
 
 var (
@@ -60,7 +63,8 @@ var (
 	// maxWaitForBind refers to a single execution of the retry loop
 	maxWaitForBind = 30 * time.Second
 	// statusLoggingWait is only used when debug is true
-	statusLoggingWait = 5 * time.Second
+	statusLoggingWait                   = 5 * time.Second
+	defaultListOfStorageResourceOptions = []string{"size", "sizeInGiB"}
 )
 
 // Provisioner provides dynamic pvs based on pvcs and storage classes.
@@ -288,7 +292,6 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class
 
 	// find a name...
 	volName := p.getBestVolName(claim, class)
-
 	pv, err := p.newPersistentVolume(volName, claim, class)
 	if err != nil {
 		util.LogError.Printf("error building pv from %v and %v. err=%v", claim, class, err)
@@ -317,9 +320,12 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class
 			return
 		}
 
+		sizeForDockerVolumeinGib := getClaimSizeForFactor(claim, dockerClient, 0)
+		optionsMap := getDockerOptions(class.Parameters, sizeForDockerVolumeinGib, dockerClient.ListOfStorageResourceOptions)
+
 		provisionChain.AppendRunner(&createDockerVol{
 			requestedName: pv.Name,
-			options:       getDockerOptions(class.Parameters),
+			options:       optionsMap,
 			client:        dockerClient,
 		})
 	}
@@ -361,6 +367,26 @@ func limit(watched, parked *uint32, max uint32) {
 	}
 }
 
+func getClaimSizeForFactor(claim *api_v1.PersistentVolumeClaim, dockerClient *dockervol.DockerVolumePlugin, sizeForDockerVolumeinGib int) int {
+	requestParams := claim.Spec.Resources.Requests
+	for key, val := range requestParams {
+		if key == "storage" {
+			if val.Format == resource_v1.BinarySI || val.Format == resource_v1.DecimalSI {
+				sizeInBytes, isInt := val.AsInt64()
+				if isInt && sizeInBytes > 0 {
+					if dockerClient.ListOfStorageResourceOptions != nil &&
+						dockerClient.FactorForConversion != 0 {
+						sizeForDockerVolumeinGib = int(sizeInBytes) / dockerClient.FactorForConversion
+						util.LogDebug.Printf("claimSize=%d for size=%d bytes and factorForConversion=%d", sizeForDockerVolumeinGib, sizeInBytes, dockerClient.FactorForConversion)
+						return sizeForDockerVolumeinGib
+					}
+				}
+			}
+		}
+	}
+	return sizeForDockerVolumeinGib
+}
+
 func (p *Provisioner) newDockerClient(provisionerName string) (*dockervol.DockerVolumePlugin, error) {
 	driverName := strings.Split(provisionerName, "/")
 	if len(driverName) < 2 {
@@ -369,9 +395,12 @@ func (p *Provisioner) newDockerClient(provisionerName string) (*dockervol.Docker
 	}
 	configPathName := fmt.Sprintf("%s%s/%s.json", flexVolumeBasePath, strings.Replace(provisionerName, "/", "~", 1), driverName[1])
 	util.LogDebug.Printf("looking for %s", configPathName)
-
-	socketFile := ""
-	strip := true
+	var (
+		socketFile                   string
+		strip                        = defaultStripValue
+		listOfStorageResourceOptions = defaultListOfStorageResourceOptions
+		factorForConversion          = defaultfactorForConversion
+	)
 
 	c, err := jconfig.NewConfig(configPathName)
 	if err != nil {
@@ -386,9 +415,23 @@ func (p *Provisioner) newDockerClient(provisionerName string) (*dockervol.Docker
 		if err == nil {
 			strip = b
 		}
-	}
+		ss := c.GetStringSlice("listOfStorageResourceOptions")
+		if ss != nil {
+			listOfStorageResourceOptions = ss
+		}
+		i := c.GetInt64("factorForConversion")
+		if i != 0 {
+			factorForConversion = int(i)
+		}
 
-	return dockervol.NewDockerVolumePlugin(socketFile, strip), nil
+	}
+	options := &dockervol.Options{
+		SocketPath:                   socketFile,
+		StripK8sFromOptions:          strip,
+		ListOfStorageResourceOptions: listOfStorageResourceOptions,
+		FactorForConversion:          factorForConversion,
+	}
+	return dockervol.NewDockerVolumePlugin(options), nil
 }
 
 // block until there are some classes defined in the cluster

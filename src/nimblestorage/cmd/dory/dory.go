@@ -18,12 +18,12 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-
+	"nimblestorage/pkg/docker/dockervol"
 	"nimblestorage/pkg/jconfig"
 	flexvol "nimblestorage/pkg/k8s/flexvol"
 	"nimblestorage/pkg/util"
+	"os"
+	"path/filepath"
 )
 
 var (
@@ -37,6 +37,8 @@ var (
 	logFilePath                  = "/var/log/dory.log"
 	debug                        = false
 	createVolumes                = true
+	factorForConversion          = 1073741824
+	listOfStorageResourceOptions = []string{"size", "sizeInGiB"}
 )
 
 func main() {
@@ -53,7 +55,14 @@ func main() {
 
 	driverCommand := os.Args[1]
 	util.LogInfo.Printf("[%d] request: %s %v", pid, driverCommand, os.Args[2:])
-	flexvol.Config(dockerVolumePluginSocketPath, stripK8sFromOptions, createVolumes)
+	dockervolOptions := &dockervol.Options{
+		SocketPath:                   dockerVolumePluginSocketPath,
+		StripK8sFromOptions:          stripK8sFromOptions,
+		CreateVolumes:                createVolumes,
+		ListOfStorageResourceOptions: listOfStorageResourceOptions,
+		FactorForConversion:          factorForConversion,
+	}
+	flexvol.Config(dockervolOptions)
 	mess := flexvol.Handle(driverCommand, os.Args[2:])
 	util.LogInfo.Printf("[%d] reply  : %s %v: %v", pid, driverCommand, os.Args[2:], mess)
 
@@ -93,5 +102,26 @@ func initialize() bool {
 		override = true
 		createVolumes = b
 	}
+	overrideFlexVol := initializeFlexVolOptions(c)
+	if overrideFlexVol {
+		override = true
+	}
+
+	return override
+}
+
+func initializeFlexVolOptions(c *jconfig.Config) bool {
+	override := false
+	ss := c.GetStringSlice("listOfStorageResourceOptions")
+	if ss != nil {
+		override = true
+		listOfStorageResourceOptions = ss
+	}
+	i := c.GetInt64("factorForConversion")
+	if i != 0 {
+		override = true
+		factorForConversion = int(i)
+	}
+
 	return override
 }

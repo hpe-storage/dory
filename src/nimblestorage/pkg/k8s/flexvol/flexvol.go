@@ -58,7 +58,8 @@ const (
 var (
 	//createVolumes indicate whether the driver should create missing volumes
 	createVolumes = true
-	dvp           *dockervol.DockerVolumePlugin
+
+	dvp *dockervol.DockerVolumePlugin
 )
 
 // Response containers the required information for each invocation
@@ -91,10 +92,9 @@ func (ar *AttachRequest) getBestName() string {
 }
 
 // Config controls the docker behavior
-// If this gets anymore complicated we'll use a struct here
-func Config(socket string, stripK8sNs, createVols bool) {
-	dvp = dockervol.NewDockerVolumePlugin(socket, stripK8sNs)
-	createVolumes = createVols
+func Config(options *dockervol.Options) {
+	dvp = dockervol.NewDockerVolumePlugin(options)
+	createVolumes = options.CreateVolumes
 }
 
 // BuildJSONResponse marshals a message into the FlexVolume JSON Response.
