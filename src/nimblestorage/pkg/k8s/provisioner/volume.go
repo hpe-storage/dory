@@ -117,12 +117,31 @@ func getPersistentVolume(t interface{}) (*api_v1.PersistentVolume, error) {
 	}
 }
 
-func getDockerOptions(params map[string]string) map[string]interface{} {
+func getDockerOptions(params map[string]string, claimSizeinGiB int, listOfOptions []string) map[string]interface{} {
 	dockOpts := make(map[string]interface{}, len(params))
 	for key, value := range params {
 		dockOpts[key] = value
+		util.LogDebug.Printf("storageclass option key:%v value:%v", key, value)
+		if claimSizeinGiB > 0 && contains(listOfOptions, key) {
+			for _, option := range listOfOptions {
+				if key == option {
+					util.LogInfo.Printf("storageclass option matched storage resource option:%s ,overriding the value to %d", key, claimSizeinGiB)
+					dockOpts[key] = claimSizeinGiB
+					break
+				}
+			}
+		}
 	}
 	return dockOpts
+}
+
+func contains(s []string, e string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Provisioner) newPersistentVolume(pvName string, claim *api_v1.PersistentVolumeClaim, class *storage_v1.StorageClass) (*api_v1.PersistentVolume, error) {

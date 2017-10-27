@@ -46,10 +46,23 @@ const (
 	defaultSocketPath = "/run/docker/plugins/nimble.sock"
 )
 
+//Options  for volumedriver
+type Options struct {
+	SocketPath                   string
+	StripK8sFromOptions          bool
+	LogFilePath                  string
+	Debug                        bool
+	CreateVolumes                bool
+	ListOfStorageResourceOptions []string
+	FactorForConversion          int
+}
+
 //DockerVolumePlugin is the client to a specific docker volume plugin
 type DockerVolumePlugin struct {
-	stripK8sOpts bool
-	client       *connectivity.Client
+	stripK8sOpts                 bool
+	client                       *connectivity.Client
+	ListOfStorageResourceOptions []string
+	FactorForConversion          int
 }
 
 //Errorer describes the ability get the embedded error
@@ -109,13 +122,15 @@ type DockerVolume struct {
 // NewDockerVolumePlugin creates a DockerVolumePlugin which can be used to communicate with
 // a Docker Volume Plugin.  socketPath is the full path to the location of the socket file for the nimble volume plugin.
 // stripK8sFromOptions indicates if k8s namespace should be stripped fromoptions.
-func NewDockerVolumePlugin(socketPath string, stripK8sFromOptions bool) *DockerVolumePlugin {
-	if socketPath == "" {
-		socketPath = defaultSocketPath
+func NewDockerVolumePlugin(options *Options) *DockerVolumePlugin {
+	if options.SocketPath == "" {
+		options.SocketPath = defaultSocketPath
 	}
 	return &DockerVolumePlugin{
-		stripK8sOpts: stripK8sFromOptions,
-		client:       connectivity.NewSocketClient(socketPath),
+		stripK8sOpts: options.StripK8sFromOptions,
+		client:       connectivity.NewSocketClient(options.SocketPath),
+		ListOfStorageResourceOptions: options.ListOfStorageResourceOptions,
+		FactorForConversion:          options.FactorForConversion,
 	}
 }
 
