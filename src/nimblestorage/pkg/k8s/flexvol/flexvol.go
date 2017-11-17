@@ -74,6 +74,8 @@ type Response struct {
 	VolumeName string `json:"volumeName,omitempty"`
 	//"attached": <True/False (Return true if volume is attached on the node. Valid only for isattached call-out)>
 	Attached bool `json:"attached,omitempty"`
+	//Capabilities reported on Driver init
+	DriverCapabilities map[string]bool `json:"capabilities,omitempty"`
 }
 
 //AttachRequest is used to create a volume if one with this name doesn't exist
