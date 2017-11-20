@@ -37,6 +37,7 @@ var (
 	logFilePath                  = "/var/log/dory.log"
 	debug                        = false
 	createVolumes                = true
+	enable16                     = false
 	factorForConversion          = 1073741824
 	listOfStorageResourceOptions = []string{"size", "sizeInGiB"}
 )
@@ -63,7 +64,7 @@ func main() {
 		FactorForConversion:          factorForConversion,
 	}
 	flexvol.Config(dockervolOptions)
-	mess := flexvol.Handle(driverCommand, os.Args[2:])
+	mess := flexvol.Handle(driverCommand, enable16, os.Args[2:])
 	util.LogInfo.Printf("[%d] reply  : %s %v: %v", pid, driverCommand, os.Args[2:], mess)
 
 	fmt.Println(mess)
@@ -121,6 +122,11 @@ func initializeFlexVolOptions(c *jconfig.Config) bool {
 	if i != 0 {
 		override = true
 		factorForConversion = int(i)
+	}
+	e16, err := c.GetBool("enable1.6")
+	if err == nil {
+		override = true
+		enable16 = e16
 	}
 
 	return override
