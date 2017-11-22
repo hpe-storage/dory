@@ -103,3 +103,67 @@ func TestZeroClaimSize(t *testing.T) {
 		t.Error("Claim size should be zero for invalid Storage Resource")
 	}
 }
+
+func getTestStorageClass() *storage_v1.StorageClass {
+	testClass := new(storage_v1.StorageClass)
+	testClass.ObjectMeta.Name = "pvc"
+	testClass.Namespace = "/apis/storage.k8s.io/v1/storageclasses/foo"
+	testClass.UID = "76fe311a-b511-11e7-8025-005056860ac5"
+	testClass.ResourceVersion = "78963"
+	testClass.Generation = 0
+	testClass.Provisioner = "dory"
+	testClass.Parameters = make(map[string]string)
+	return testClass
+}
+
+func getTestProvisioner() *Provisioner {
+	config := new(rest.Config)
+	kubeClient, _ := kubernetes.NewForConfig(config)
+	p := NewProvisioner(kubeClient, "dory", true, true)
+	return p
+}
+
+func TestGetPersistentVolume(t *testing.T) {
+	p := getTestProvisioner()
+	pv, _ := p.newPersistentVolume("pv-test", getTestPVC(), getTestStorageClass())
+	vol, _ := getPersistentVolume(pv)
+	if vol == nil {
+		t.Error("unable to retrieve volume from pv interface")
+	}
+}
+
+func TestGetPersistentVolumeClaim(t *testing.T) {
+	claim, _ := getPersistentVolumeClaim(getTestPVC())
+	if claim == nil {
+		t.Error("unable to retrieve claim from pvc interface")
+	}
+}
+
+func TestGetClaimMatchLabels(t *testing.T) {
+	matchLabels := getClaimMatchLabels(getTestPVC())
+	if matchLabels["foo"] != "bar" {
+		t.Error("unable to retrieve match labels from pvc")
+	}
+}
+
+func TestGetClaimClassName(t *testing.T) {
+	name := getClaimClassName(getTestPVC())
+	if name == "" {
+		t.Error("claim name should not be empty for claim", getTestPVC())
+	}
+}
+
+func TestGetStorageClass(t *testing.T) {
+	class, _ := getStorageClass(getTestStorageClass())
+	if class == nil {
+		t.Error("unable to retrieve storage class")
+	}
+}
+
+func TestGetBestVolName(t *testing.T) {
+	p := getTestProvisioner()
+	volName := p.getBestVolName(getTestPVC(), getTestStorageClass())
+	if volName == "" {
+		t.Error("volname should not be empty")
+	}
+}
