@@ -2,7 +2,11 @@ package provisioner
 
 import (
 	resource_v1 "k8s.io/apimachinery/pkg/api/resource"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	api_v1 "k8s.io/client-go/pkg/api/v1"
+	storage_v1 "k8s.io/client-go/pkg/apis/storage/v1"
+	rest "k8s.io/client-go/rest"
 	"nimblestorage/pkg/docker/dockervol"
 	"testing"
 )
@@ -67,13 +71,22 @@ func TestInvalidStorageResources(t *testing.T) {
 }
 func getTestPVC() *api_v1.PersistentVolumeClaim {
 	testClaim := new(api_v1.PersistentVolumeClaim)
+	testClaim.Annotations = make(map[string]string)
 	testValue := resource_v1.NewQuantity(123456789012345, "BinarySI")
 	requests := make(api_v1.ResourceList)
 	requests["storage"] = *testValue
 	testClaim.Spec.Resources.Requests = requests
+	testClaim.ObjectMeta.Name = "pvc-test"
+	testClaim.Namespace = "default"
+	testClaim.SelfLink = "/api/v1/namespaces/default/persistentvolumeclaims/pvc-test"
+	testClaim.UID = "29dd7cc4-c319-11e7-83a2-005056860ac5"
+	selector := new(meta_v1.LabelSelector)
+	selector.MatchLabels = map[string]string{"foo": "bar"}
+	testClaim.Spec.Selector = selector
+	storageClass := "foo"
+	testClaim.Spec.StorageClassName = &storageClass
 	return testClaim
 }
-
 func TestNonZeroGetClaimSize(t *testing.T) {
 	claim := getTestPVC()
 	dockerClient := &dockervol.DockerVolumePlugin{
