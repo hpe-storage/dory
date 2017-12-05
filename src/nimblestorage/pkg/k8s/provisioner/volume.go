@@ -119,10 +119,12 @@ func getPersistentVolume(t interface{}) (*api_v1.PersistentVolume, error) {
 
 func getDockerOptions(params map[string]string, claimSizeinGiB int, listOfOptions []string) map[string]interface{} {
 	dockOpts := make(map[string]interface{}, len(params))
+	foundSizeKey := false
 	for key, value := range params {
 		dockOpts[key] = value
 		util.LogDebug.Printf("storageclass option key:%v value:%v", key, value)
 		if claimSizeinGiB > 0 && contains(listOfOptions, key) {
+			foundSizeKey = true
 			for _, option := range listOfOptions {
 				if key == option {
 					util.LogInfo.Printf("storageclass option matched storage resource option:%s ,overriding the value to %d", key, claimSizeinGiB)
@@ -131,6 +133,10 @@ func getDockerOptions(params map[string]string, claimSizeinGiB int, listOfOption
 				}
 			}
 		}
+	}
+	if claimSizeinGiB > 0 && !foundSizeKey {
+		util.LogDebug.Print("storage class does not contain size key, overriding to claim size")
+		dockOpts["size"] = claimSizeinGiB
 	}
 	return dockOpts
 }
