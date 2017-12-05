@@ -65,8 +65,8 @@ func TestDockerOptionValidClaim(t *testing.T) {
 func TestInvalidStorageResources(t *testing.T) {
 	invalidOption := getTestDockerOptions()["invalidStorageResources"]
 	outputOption := getDockerOptions(getStorageClassParams(), invalidOption.claimSize, invalidOption.listOfStorageResourceOptions)
-	if outputOption["size"] != getStorageClassParams()["size"] {
-		t.Error("size should be not set for for invalid listOfStorageResourceOptions")
+	if outputOption["size"] == getStorageClassParams()["size"] {
+		t.Error("size should set for for invalid listOfStorageResourceOptions but valid claim size")
 	}
 }
 func getTestPVC() *api_v1.PersistentVolumeClaim {

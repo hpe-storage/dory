@@ -38,7 +38,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	provisionerName := "dory"
+	provisionerName := "dev.hpe.com"
 	if len(os.Args) > 2 {
 		provisionerName = os.Args[2]
 	}
