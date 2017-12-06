@@ -1,5 +1,5 @@
 # Doryd
-Doryd is an out-of-tree dynamic provisioner for Docker Volume plugins that uses the StorageClass interface available in Kubernetes. Doryd needs to run on every node in the cluster where you would normally schedule workloads that require persistent storage provisioned by Doryd. Doryd also depends on [Dory](../dory/README.md), the FlexVolume driver for Docker Volume plugins.
+Doryd is an out-of-tree dynamic provisioner for Docker Volume plugins that uses the StorageClass interface available in Kubernetes. Doryd needs to have access to the cluster to listen for Persistent Volume Claims against the Storage Classes that Dory governs. Doryd also depends on [Dory](../dory/README.md), the FlexVolume driver for Docker Volume plugins.
 
 # Building (optional)
 Dory is written in Go and requires golang on your machine. The following example installs the necessary tools and builds Dory on a RHEL 7.4 system:
@@ -14,7 +14,7 @@ make doryd
 
 You should end up with a `doryd` executable in the `./bin` directory. A `Dockerfile` is not yet available in the repository but is fairly straight-forward:
 ```
-FROM centos:latest
+FROM alpine:latest
 ADD [ "bin/doryd", "/usr/local/bin/doryd" ]
 ENTRYPOINT [ "doryd" ]
 CMD [ "/etc/kubernetes/admin.conf", "dev.hpe.com" ]
