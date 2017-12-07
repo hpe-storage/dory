@@ -2,7 +2,10 @@
 Doryd is an out-of-tree dynamic provisioner for Docker Volume plugins that uses the StorageClass interface available in Kubernetes. Doryd needs to have access to the cluster to listen for Persistent Volume Claims against the Storage Classes that Dory governs. Doryd also depends on [Dory](../dory/README.md), the FlexVolume driver for Docker Volume plugins.
 
 # Building (optional)
-Dory is written in Go and requires golang on your machine. The following example installs the necessary tools and builds Dory on a RHEL 7.4 system:
+There are two ways provided to build Doryd. A host machine build and a fully containerized build. The containerized build require Docker 17.05 or newer on both client and daemon.
+
+## Host build
+Doryd is written in Go and requires golang on your machine. The following example installs the necessary tools and builds Doryd on a RHEL 7.4 system:
 ```
 sudo subscription-manager repos --enable=rhel-7-server-optional-rpms
 sudo yum install -y golang make
@@ -12,20 +15,20 @@ make vendor
 make doryd
 ```
 
-You should end up with a `doryd` executable in the `./bin` directory. A `Dockerfile` is not yet available in the repository but is fairly straight-forward:
-```
-FROM alpine:latest
-ADD [ "bin/doryd", "/usr/local/bin/doryd" ]
-ENTRYPOINT [ "doryd" ]
-CMD [ "/etc/kubernetes/admin.conf", "dev.hpe.com" ]
-```
+You should end up with a `doryd` executable in the `./bin` directory.
 
-Build it with:
+Optionally, you may build a doryd container:
 ```
-docker build -t doryd:latest .
+docker build -t doryd:latest build/docker/doryd/Dockerfile .
 ```
 
 **Hint:** Go is available through the [EPEL](https://fedoraproject.org/wiki/EPEL) repository for .rpm based distributions and a `golang` package is part of the official Ubuntu repositories.
+
+## Containerized build
+Building Doryd in a container uses a multi-stage build and only require Docker 17.05 or newer.
+```
+docker build -t doryd:latest https://raw.githubusercontent.com/hpe-storage/dory/master/build/docker/doryd/Dockerfile.staged
+```
 
 # Running
 Doryd is available on Docker Hub and an [example DaemonSet specification](../../examples/ds-doryd.yaml) is available.
