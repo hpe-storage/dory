@@ -139,10 +139,10 @@ func (p *Provisioner) sendUpdate(t interface{}) {
 	}
 
 	// hold the big lock just to send
-	defer p.id2chanLock.Unlock()
 	p.id2chanLock.Lock()
-	messChan := p.id2chan[id]
+	defer p.id2chanLock.Unlock()
 
+	messChan := p.id2chan[id]
 	if messChan == nil {
 		util.LogDebug.Printf("send: skipping %s, not in map", id)
 		return
@@ -250,7 +250,7 @@ func (p *Provisioner) deleteVolume(pv *api_v1.PersistentVolume, rmPV bool) {
 
 	// if the pv was just deleted, make sure we clean up the docker volume
 	if p.affectDockerVols {
-		dockerClient, err := p.newDockerClient(provisioner)
+		dockerClient, err := p.newDockerVolumePluginClient(provisioner)
 		if err != nil {
 			info := fmt.Sprintf("failed to get docker client for %s while trying to delete pv %s: %v", provisioner, pv.Name, err)
 			util.LogError.Print(info)
@@ -307,7 +307,7 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class
 
 	if p.affectDockerVols {
 		var dockerClient *dockervol.DockerVolumePlugin
-		dockerClient, err = p.newDockerClient(class.Provisioner)
+		dockerClient, err = p.newDockerVolumePluginClient(class.Provisioner)
 		if err != nil {
 			util.LogError.Printf("unable to get docker client for class %v while trying to provision pvc named %s (%s): %s", class, claim.Name, id, err)
 			p.eventRecorder.Event(claim, api_v1.EventTypeWarning, "ProvisionVolumeGetClient",
@@ -387,7 +387,7 @@ func getClaimSizeForFactor(claim *api_v1.PersistentVolumeClaim, dockerClient *do
 	return sizeForDockerVolumeinGib
 }
 
-func (p *Provisioner) newDockerClient(provisionerName string) (*dockervol.DockerVolumePlugin, error) {
+func (p *Provisioner) newDockerVolumePluginClient(provisionerName string) (*dockervol.DockerVolumePlugin, error) {
 	driverName := strings.Split(provisionerName, "/")
 	if len(driverName) < 2 {
 		util.LogInfo.Printf("Unable to parse provisioner name %s.", provisionerName)
@@ -431,7 +431,7 @@ func (p *Provisioner) newDockerClient(provisionerName string) (*dockervol.Docker
 		ListOfStorageResourceOptions: listOfStorageResourceOptions,
 		FactorForConversion:          factorForConversion,
 	}
-	return dockervol.NewDockerVolumePlugin(options), nil
+	return dockervol.NewDockerVolumePlugin(options)
 }
 
 // block until there are some classes defined in the cluster
