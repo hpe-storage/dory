@@ -63,8 +63,15 @@ func main() {
 		ListOfStorageResourceOptions: listOfStorageResourceOptions,
 		FactorForConversion:          factorForConversion,
 	}
-	flexvol.Config(dockervolOptions)
-	mess := flexvol.Handle(driverCommand, enable16, os.Args[2:])
+	err := flexvol.Config(dockervolOptions)
+	var mess string
+	if err != nil {
+		mess = flexvol.BuildJSONResponse(&flexvol.Response{
+			Status:  flexvol.FailureStatus,
+			Message: fmt.Sprintf("Unable to communicate with docker volume plugin - %s", err.Error())})
+	} else {
+		mess = flexvol.Handle(driverCommand, enable16, os.Args[2:])
+	}
 	util.LogInfo.Printf("[%d] reply  : %s %v: %v", pid, driverCommand, os.Args[2:], mess)
 
 	fmt.Println(mess)
@@ -103,6 +110,7 @@ func initialize() bool {
 		override = true
 		createVolumes = b
 	}
+
 	overrideFlexVol := initializeFlexVolOptions(c)
 	if overrideFlexVol {
 		override = true
@@ -123,6 +131,7 @@ func initializeFlexVolOptions(c *jconfig.Config) bool {
 		override = true
 		factorForConversion = int(i)
 	}
+
 	e16, err := c.GetBool("enable1.6")
 	if err == nil {
 		override = true
