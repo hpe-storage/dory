@@ -38,10 +38,19 @@ Create a directory on each kubelet with using the following convention: `/usr/li
 Dory looks for a configuration file with the same name as the executable with a `.json` extension. Following the example above, the configuration file would be `/usr/libexec/kubernetes/kubelet-plugins/volume/exec/dory~nimble/nimble.json`.
 
 ### Docker Volume Plugin Socket Path
-The critical attribute in this file is called `"dockerVolumePluginSocketPath"`. This tells Dory where the Docker Volume Plugin socket file is. Again, following the example above, the file would contain the following;
+The critical attribute in this file is called `"dockerVolumePluginSocketPath"`.
+
+In the case of a **version 1** [Docker Volume Plugin](https://docs.docker.com/engine/extend/legacy_plugins/), this is used to tell Dory where the socket file is located for the Docker Volume Plugin. Again, following the example above, the file would contain the following;
 ```
 {
     "dockerVolumePluginSocketPath": "/run/docker/plugins/nimble.sock"
+}
+```
+
+The attribute can also be used to describe a **version 2** [Docker Volume Plugin](https://store.docker.com/search?type=plugin). In this case, the name of the plugin used in place of the path to the socket file. The following example shows a plugin that has been aliased to 'nimble'. Note that version 2 support was added after release-1.
+```
+{
+    "dockerVolumePluginSocketPath": "nimble:latest"
 }
 ```
 
@@ -100,7 +109,7 @@ This example uses the Docker Volume Driver from [HPE Nimble Storage](https://www
 Docker Volume plugins are beginning to surface for Windows Containers. Kubernetes is getting more mature for Windows. We hope to extend Dory to Windows in the future.
 
 # Dynamic Provisioning
-Dory has been extended with a dynamic StorageClass provisioner named [Doryd](../doryd/README.md). Doryd still depends on Dory for attach/detach and mount/unmount. 
+Dory has been extended with a dynamic StorageClass provisioner named [Doryd](../doryd/README.md). Doryd still depends on Dory for attach/detach and mount/unmount.
 
 # Licensing
 Dory is licensed under the Apache License, Version 2.0. Please see [LICENSE](../../LICENSE) for the full license text.
