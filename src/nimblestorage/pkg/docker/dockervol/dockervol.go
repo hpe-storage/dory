@@ -131,8 +131,9 @@ type PluginCapabilities struct {
 }
 
 // NewDockerVolumePlugin creates a DockerVolumePlugin which can be used to communicate with
-// a Docker Volume Plugin.  socketPath is the full path to the location of the socket file for the nimble volume plugin.
-// stripK8sFromOptions indicates if k8s namespace should be stripped fromoptions.
+// a Docker Volume Plugin.  options.socketPath can be the full path to the socket file or
+// the name of a Docker V2 plugin.  In the case of the V2 plugin, the name of th plugin
+// is used to look up the full path to the socketfile.
 func NewDockerVolumePlugin(options *Options) (*DockerVolumePlugin, error) {
 	var err error
 	if !strings.HasPrefix(options.SocketPath, "/") {
