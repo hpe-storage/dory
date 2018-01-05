@@ -26,6 +26,19 @@ import (
 	"path/filepath"
 )
 
+const (
+	cmdConfigChk = "config"
+	//override options
+	optDockerVolumePluginSocketPath = "dockerVolumePluginSocketPath"
+	optStripK8sFromOptions          = "stripK8sFromOptions"
+	optLogFilePath                  = "logFilePath"
+	optDebug                        = "logDebug"
+	optCreateVolumes                = "createVolumes"
+	optEnable16                     = "enable1.6"
+	optFactorForConversion          = "factorForConversion"
+	optListOfStorageResourceOptions = "listOfStorageResourceOptions"
+)
+
 var (
 	// Version contains the current version added by the build process
 	Version = "dev"
@@ -48,13 +61,22 @@ func main() {
 		return
 	}
 
-	overridden := initialize()
+	driverCommand := os.Args[1]
+	justCheckConfig := false
+	if driverCommand == cmdConfigChk {
+		justCheckConfig = true
+	}
+
+	overridden := initialize(os.Args[0], justCheckConfig)
+	if justCheckConfig {
+		return
+	}
+
 	util.OpenLogFile(logFilePath, 10, 4, 90, debug)
 	defer util.CloseLogFile()
 	pid := os.Getpid()
 	util.LogInfo.Printf("[%d] entry  : Driver=%s Version=%s-%s Socket=%s Overridden=%t", pid, filepath.Base(os.Args[0]), Version, Commit, dockerVolumePluginSocketPath, overridden)
 
-	driverCommand := os.Args[1]
 	util.LogInfo.Printf("[%d] request: %s %v", pid, driverCommand, os.Args[2:])
 	dockervolOptions := &dockervol.Options{
 		SocketPath:                   dockerVolumePluginSocketPath,
@@ -77,41 +99,44 @@ func main() {
 	fmt.Println(mess)
 }
 
-func initialize() bool {
+func initialize(name string, report bool) bool {
 	override := false
 
 	// don't log anything in initialize because we haven't open a log file yet.
-	c, err := jconfig.NewConfig(fmt.Sprintf("%s%s", os.Args[0], ".json"))
+	filePath := fmt.Sprintf("%s%s", name, ".json")
+	c, err := jconfig.NewConfig(filePath)
 	if err != nil {
+		if report {
+			fmt.Printf("Error processing %s - %s\n", filePath, err.Error())
+		}
 		return false
 	}
-	s, err := c.GetStringWithError("logFilePath")
+
+	s, err := c.GetStringWithError(optLogFilePath)
 	if err == nil && s != "" {
 		override = true
 		logFilePath = s
+	} else {
+		configOptCheck(report, optLogFilePath, err)
 	}
-	s, err = c.GetStringWithError("dockerVolumePluginSocketPath")
+
+	s, err = c.GetStringWithError(optDockerVolumePluginSocketPath)
 	if err == nil && s != "" {
 		override = true
 		dockerVolumePluginSocketPath = s
+	} else {
+		configOptCheck(report, optDockerVolumePluginSocketPath, err)
 	}
-	b, err := c.GetBool("logDebug")
+
+	b, err := c.GetBool(optDebug)
 	if err == nil {
 		override = true
 		debug = b
-	}
-	b, err = c.GetBool("stripK8sFromOptions")
-	if err == nil {
-		override = true
-		stripK8sFromOptions = b
-	}
-	b, err = c.GetBool("createVolumes")
-	if err == nil {
-		override = true
-		createVolumes = b
+	} else {
+		configOptCheck(report, optDebug, err)
 	}
 
-	overrideFlexVol := initializeFlexVolOptions(c)
+	overrideFlexVol := initializeFlexVolOptions(c, report)
 	if overrideFlexVol {
 		override = true
 	}
@@ -119,24 +144,71 @@ func initialize() bool {
 	return override
 }
 
-func initializeFlexVolOptions(c *jconfig.Config) bool {
+func initializeFlexVolOptions(c *jconfig.Config, report bool) bool {
 	override := false
-	ss := c.GetStringSlice("listOfStorageResourceOptions")
+
+	b, err := c.GetBool(optStripK8sFromOptions)
+	if err == nil {
+		override = true
+		stripK8sFromOptions = b
+	} else {
+		configOptCheck(report, optStripK8sFromOptions, err)
+	}
+
+	b, err = c.GetBool(optCreateVolumes)
+	if err == nil {
+		override = true
+		createVolumes = b
+	} else {
+		configOptCheck(report, optCreateVolumes, err)
+	}
+
+	ss, err := c.GetStringSliceWithError(optListOfStorageResourceOptions)
 	if ss != nil {
 		override = true
 		listOfStorageResourceOptions = ss
-	}
-	i := c.GetInt64("factorForConversion")
-	if i != 0 {
-		override = true
-		factorForConversion = int(i)
+	} else {
+		configOptCheck(report, optListOfStorageResourceOptions, err)
 	}
 
-	e16, err := c.GetBool("enable1.6")
+	i, err := c.GetInt64SliceWithError(optFactorForConversion)
+	if err == nil {
+		override = true
+		factorForConversion = int(i)
+	} else {
+		configOptCheck(report, optFactorForConversion, err)
+	}
+
+	e16, err := c.GetBool(optEnable16)
 	if err == nil {
 		override = true
 		enable16 = e16
+	} else {
+		configOptCheck(report, optEnable16, err)
 	}
+	configOptDump(report)
 
 	return override
+}
+
+func configOptCheck(report bool, optName string, err error) {
+	if report {
+		fmt.Printf("Error processing option '%s' - %s\n", optName, err.Error())
+	}
+}
+
+func configOptDump(report bool) {
+	if !report {
+		return
+	}
+	fmt.Printf("\nDriver=%s Version=%s-%s\nCurrent Config:\n", filepath.Base(os.Args[0]), Version, Commit)
+	fmt.Printf("%30s = %s\n", optDockerVolumePluginSocketPath, dockerVolumePluginSocketPath)
+	fmt.Printf("%30s = %t\n", optStripK8sFromOptions, stripK8sFromOptions)
+	fmt.Printf("%30s = %s\n", optLogFilePath, logFilePath)
+	fmt.Printf("%30s = %t\n", optDebug, debug)
+	fmt.Printf("%30s = %t\n", optCreateVolumes, createVolumes)
+	fmt.Printf("%30s = %t\n", optEnable16, enable16)
+	fmt.Printf("%30s = %d\n", optFactorForConversion, factorForConversion)
+	fmt.Printf("%30s = %v\n", optListOfStorageResourceOptions, listOfStorageResourceOptions)
+
 }
