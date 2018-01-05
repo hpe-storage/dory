@@ -1,10 +1,10 @@
 ---
 apiVersion: extensions/v1beta1
-kind: DaemonSet
+kind: Deployment
 metadata:
   name: doryd
 spec:
-  updateStrategy:
+  strategy:
      type: RollingUpdate
   template:
     metadata:
@@ -14,10 +14,18 @@ spec:
       name: doryd
     spec:
       restartPolicy: Always
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+           nodeSelectorTerms:
+            - matchExpressions:
+              - key: "node-role.kubernetes.io/master"
+                operator: In
+                values: [""]
       tolerations:
-       -
-          effect: NoSchedule
+        -
           operator: Exists
+          effect: NoSchedule
       containers:
         -
           image: nimblestorage/doryd
