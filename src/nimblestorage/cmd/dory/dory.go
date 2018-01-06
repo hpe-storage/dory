@@ -37,6 +37,7 @@ const (
 	optEnable16                     = "enable1.6"
 	optFactorForConversion          = "factorForConversion"
 	optListOfStorageResourceOptions = "listOfStorageResourceOptions"
+	optSupportsCapabilities         = "supportsCapabilities"
 )
 
 var (
@@ -53,6 +54,7 @@ var (
 	enable16                     = false
 	factorForConversion          = 1073741824
 	listOfStorageResourceOptions = []string{"size", "sizeInGiB"}
+	supportsCapabilities         = true
 )
 
 func main() {
@@ -84,6 +86,7 @@ func main() {
 		CreateVolumes:                createVolumes,
 		ListOfStorageResourceOptions: listOfStorageResourceOptions,
 		FactorForConversion:          factorForConversion,
+		SupportsCapabilities:         supportsCapabilities,
 	}
 	err := flexvol.Config(dockervolOptions)
 	var mess string
@@ -134,6 +137,14 @@ func initialize(name string, report bool) bool {
 		debug = b
 	} else {
 		configOptCheck(report, optDebug, err)
+	}
+
+	b, err = c.GetBool(optSupportsCapabilities)
+	if err == nil {
+		override = true
+		supportsCapabilities = b
+	} else {
+		configOptCheck(report, optSupportsCapabilities, err)
 	}
 
 	overrideFlexVol := initializeFlexVolOptions(c, report)
@@ -210,5 +221,6 @@ func configOptDump(report bool) {
 	fmt.Printf("%30s = %t\n", optEnable16, enable16)
 	fmt.Printf("%30s = %d\n", optFactorForConversion, factorForConversion)
 	fmt.Printf("%30s = %v\n", optListOfStorageResourceOptions, listOfStorageResourceOptions)
+	fmt.Printf("%30s = %t\n", optSupportsCapabilities, supportsCapabilities)
 
 }
