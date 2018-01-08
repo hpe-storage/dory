@@ -6,5 +6,6 @@
     "createVolumes": false,
     "enable1.6": true,
     "listOfStorageResourceOptions" : ["size","sizeInGiB","w","x","y","z"],
-    "factorForConversion": 14
+    "factorForConversion": 14,
+    "supportsCapabilities": false
 }

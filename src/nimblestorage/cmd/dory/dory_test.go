@@ -31,11 +31,12 @@ var basicTests = []struct {
 	enable16                     bool
 	factorForConversion          int
 	listOfStorageResourceOptions []string
+	supportsCapabilities         bool
 }{
-	{"test/good", true, "/run/docker/plugins/nimble.sock", true, "/var/log/dory.log", false, true, false, 1073741824, []string{"size", "sizeInGiB"}},
-	{"test/flipped", true, "nimble", false, "some path", true, false, true, 14, []string{"size", "sizeInGiB", "w", "x", "y", "z"}},
-	{"test/broken", false, "/run/docker/plugins/nimble.sock", true, "/var/log/dory.log", false, true, false, 1073741824, []string{"size", "sizeInGiB"}},
-	{"test/errors", true, "21", true, "true", false, true, false, 1073741824, []string{"size", "sizeInGiB"}},
+	{"test/good", true, "/run/docker/plugins/nimble.sock", true, "/var/log/dory.log", false, true, false, 1073741824, []string{"size", "sizeInGiB"}, true},
+	{"test/flipped", true, "nimble", false, "some path", true, false, true, 14, []string{"size", "sizeInGiB", "w", "x", "y", "z"}, false},
+	{"test/broken", false, "/run/docker/plugins/nimble.sock", true, "/var/log/dory.log", false, true, false, 1073741824, []string{"size", "sizeInGiB"}, true},
+	{"test/errors", true, "21", true, "true", false, true, false, 1073741824, []string{"size", "sizeInGiB"}, true},
 }
 
 // nolint: gocyclo
@@ -51,6 +52,7 @@ func TestConfigFiles(t *testing.T) {
 			enable16 = false
 			factorForConversion = 1073741824
 			listOfStorageResourceOptions = []string{"size", "sizeInGiB"}
+			supportsCapabilities = true
 
 			override := initialize(tc.name, true)
 			if override != tc.override {
@@ -114,6 +116,13 @@ func TestConfigFiles(t *testing.T) {
 					"For", "listOfStorageResourceOptions",
 					"expected", tc.listOfStorageResourceOptions,
 					"got:", listOfStorageResourceOptions,
+				)
+			}
+			if supportsCapabilities != tc.supportsCapabilities {
+				t.Error(
+					"For", "supportsCapabilities",
+					"expected", tc.supportsCapabilities,
+					"got:", supportsCapabilities,
 				)
 			}
 		})

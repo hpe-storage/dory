@@ -56,6 +56,7 @@ type Options struct {
 	CreateVolumes                bool
 	ListOfStorageResourceOptions []string
 	FactorForConversion          int
+	SupportsCapabilities         bool
 }
 
 //DockerVolumePlugin is the client to a specific docker volume plugin
@@ -154,10 +155,12 @@ func NewDockerVolumePlugin(options *Options) (*DockerVolumePlugin, error) {
 		FactorForConversion:          options.FactorForConversion,
 	}
 
-	// test connectivity
-	_, err = dvp.Capabilities()
-	if err != nil {
-		return dvp, err
+	if options.SupportsCapabilities {
+		// test connectivity
+		_, err = dvp.Capabilities()
+		if err != nil {
+			return dvp, err
+		}
 	}
 
 	return dvp, nil
