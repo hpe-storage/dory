@@ -35,7 +35,6 @@ import (
 	"nimblestorage/pkg/docker/dockervol"
 	"nimblestorage/pkg/jconfig"
 	"nimblestorage/pkg/util"
-	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -407,9 +406,6 @@ func (p *Provisioner) newDockerVolumePluginClient(provisionerName string) (*dock
 		util.LogInfo.Printf("Unable to process config at %s, %v.  Using defaults.", configPathName, err)
 	} else {
 		socketFile = c.GetString("dockerVolumePluginSocketPath")
-		if _, err = os.Stat(socketFile); os.IsNotExist(err) {
-			util.LogError.Printf("Unable to open socket file at %s, it does not exist.", socketFile)
-		}
 
 		b, err := c.GetBool("stripK8sFromOptions")
 		if err == nil {
