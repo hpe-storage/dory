@@ -150,7 +150,7 @@ func contains(s []string, e string) bool {
 	return false
 }
 
-func (p *Provisioner) newPersistentVolume(pvName string, claim *api_v1.PersistentVolumeClaim, class *storage_v1.StorageClass) (*api_v1.PersistentVolume, error) {
+func (p *Provisioner) newPersistentVolume(pvName string, params map[string]string, claim *api_v1.PersistentVolumeClaim, class *storage_v1.StorageClass) (*api_v1.PersistentVolume, error) {
 	claimRef, err := ref.GetReference(scheme.Scheme, claim)
 	if err != nil {
 		util.LogError.Printf("unable to get reference for claim %v. %s", claim, err)
@@ -182,7 +182,7 @@ func (p *Provisioner) newPersistentVolume(pvName string, claim *api_v1.Persisten
 			PersistentVolumeSource: api_v1.PersistentVolumeSource{
 				FlexVolume: &api_v1.FlexVolumeSource{
 					Driver:  class.Provisioner,
-					Options: class.Parameters,
+					Options: params,
 				},
 			},
 		},

@@ -138,7 +138,7 @@ func getTestProvisioner() *Provisioner {
 
 func TestGetPersistentVolume(t *testing.T) {
 	p := getTestProvisioner()
-	pv, _ := p.newPersistentVolume("pv-test", getTestPVC(), getTestStorageClass())
+	pv, _ := p.newPersistentVolume("pv-test", getStorageClassParams(), getTestPVC(), getTestStorageClass())
 	vol, _ := getPersistentVolume(pv)
 	if vol == nil {
 		t.Error("unable to retrieve volume from pv interface")
