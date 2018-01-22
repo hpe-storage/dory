@@ -291,11 +291,24 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class
 
 	// find a name...
 	volName := p.getBestVolName(claim, class)
-	pv, err := p.newPersistentVolume(volName, claim, class)
+
+	// create a copy of the storage class options
+	// TODO when we support pvc overrides, make the changes here
+	params := make(map[string]string)
+	for key, value := range class.Parameters {
+		params[key] = value
+	}
+
+	// add name to options
+	params["name"] = volName
+
+	pv, err := p.newPersistentVolume(volName, params, claim, class)
 	if err != nil {
-		util.LogError.Printf("error building pv from %v and %v. err=%v", claim, class, err)
+		util.LogError.Printf("error building pv from %v %v and %v. err=%v", claim, params, class, err)
 		return
 	}
+
+	util.LogDebug.Printf("pv to be created %v", pv)
 
 	// slow down a create storm
 	limit(&p.provisionCommandChains, &p.parkedCommands, maxCreates)
@@ -320,7 +333,7 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class
 		}
 
 		sizeForDockerVolumeinGib := getClaimSizeForFactor(claim, dockerClient, 0)
-		optionsMap := getDockerOptions(class.Parameters, sizeForDockerVolumeinGib, dockerClient.ListOfStorageResourceOptions)
+		optionsMap := getDockerOptions(params, sizeForDockerVolumeinGib, dockerClient.ListOfStorageResourceOptions)
 
 		provisionChain.AppendRunner(&createDockerVol{
 			requestedName: pv.Name,
