@@ -25,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"time"
 )
 
 const (
@@ -53,6 +54,7 @@ const (
 	// /var/lib/origin/openshift.local.volumes/pods/88917cdb-514d-11e7-93fb-5254005e615a/volumes/hpe~nimble/test2
 	// /var/lib/kubelet/pods/fb36bec9-51f7-11e7-8eb8-005056968cbc/volumes/hpe~nimble/test
 	mountPathRegex = "/var/lib/.*/pods/(?P<uuid>[\\w\\d-]*)/volumes/"
+	maxTries       = 3
 )
 
 var (
@@ -266,7 +268,7 @@ func Unmount(args []string) (string, error) {
 	}
 	util.LogDebug.Printf("%s was mounted on %s", args[0], dockerPath)
 
-	dockerVolumeName, err := getVolumeNameFromMountPath(args[0], dockerPath)
+	dockerVolumeName, err := retryGetVolumeNameFromMountPath(args[0], dockerPath)
 	if err != nil {
 		return "", err
 	}
@@ -278,6 +280,26 @@ func Unmount(args []string) (string, error) {
 	}
 
 	return BuildJSONResponse(&Response{Status: SuccessStatus}), nil
+}
+
+// retry getVolumeNameFromMountPath for maxTries
+func retryGetVolumeNameFromMountPath(k8sPath, dockerPath string) (string, error) {
+	util.LogDebug.Printf("retryGetVolumeNameFromMountPath called with %s %s", k8sPath, dockerPath)
+	try := 0
+	for {
+		util.LogDebug.Printf("getVolumeNameFromMountPath called with %s %s try:%d", k8sPath, dockerPath, try+1)
+		dockerVolumeName, err := getVolumeNameFromMountPath(k8sPath, dockerPath)
+		if err != nil {
+			if try < maxTries {
+				try++
+				time.Sleep(time.Duration(try) * time.Second)
+				continue
+			}
+			return "", err
+		}
+		util.LogDebug.Printf("dockerVolumeName %s found at k8sPath :%s", dockerVolumeName, k8sPath)
+		return dockerVolumeName, nil
+	}
 }
 
 func getMountID(path string) (string, error) {
