@@ -22,6 +22,7 @@ import (
 	"nimblestorage/pkg/docker/dockerlt"
 	"nimblestorage/pkg/util"
 	"strings"
+	"time"
 )
 
 const (
@@ -45,6 +46,7 @@ const (
 	NotFound = "Unable to find"
 
 	defaultSocketPath = "/run/docker/plugins/nimble.sock"
+	maxTries          = 3
 )
 
 //Options  for volumedriver
@@ -278,13 +280,23 @@ func (dvp *DockerVolumePlugin) Mount(name, mountID string) (string, error) {
 	return m, nil
 }
 
-//Unmount unmounts and detaches nimble volume
+//Unmount and detaches volume for maxTries
 func (dvp *DockerVolumePlugin) Unmount(name, mountID string) error {
-	_, err := dvp.mounter(name, mountID, UnmountURI)
-	if err != nil {
-		return err
+	util.LogDebug.Printf("Unmount called with %s %s", name, mountID)
+	try := 0
+	for {
+		util.LogDebug.Printf("dvp.mounter() called with %s %s %s try:%d", name, mountID, UnmountURI, try+1)
+		_, err := dvp.mounter(name, mountID, UnmountURI)
+		if err != nil {
+			if try < maxTries {
+				try++
+				time.Sleep(time.Duration(try) * time.Second)
+				continue
+			}
+			return err
+		}
+		return nil
 	}
-	return nil
 }
 
 //Delete calls the delete function of the plugin
