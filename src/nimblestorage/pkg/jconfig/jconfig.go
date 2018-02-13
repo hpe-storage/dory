@@ -70,6 +70,26 @@ func (c *Config) GetStringSlice(key string) (strings []string) {
 	return
 }
 
+//GetMapSlice returns map of  strings and interface with error
+func (c *Config) GetMapSlice(key string) (maps []map[string]interface{}, err error) {
+	if _, found := c.config[key]; found {
+		switch values := c.config[key].(type) {
+		case []interface{}:
+			for _, value := range values {
+				v := reflect.ValueOf(value)
+				if v.Kind() == reflect.Map {
+					for _, key := range v.MapKeys() {
+						val := v.MapIndex(key).Interface()
+						maps = append(maps, map[string]interface{}{fmt.Sprintf("%v", key): val})
+					}
+				}
+			}
+			return maps, nil
+		}
+	}
+	return nil, fmt.Errorf("key:%v not found", key)
+}
+
 //GetStringSliceWithError returns the string value loaded from the JSON
 func (c *Config) GetStringSliceWithError(key string) (strings []string, err error) {
 	if _, found := c.config[key]; found {

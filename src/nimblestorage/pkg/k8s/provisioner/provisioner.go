@@ -65,6 +65,7 @@ var (
 	// statusLoggingWait is only used when debug is true
 	statusLoggingWait                   = 5 * time.Second
 	defaultListOfStorageResourceOptions = []string{"size", "sizeInGiB"}
+	defaultDockerOptions                = map[string]interface{}{"mountConflictDelay": 30}
 )
 
 // Provisioner provides dynamic pvs based on pvcs and storage classes.
@@ -250,7 +251,7 @@ func (p *Provisioner) deleteVolume(pv *api_v1.PersistentVolume, rmPV bool) {
 
 	// if the pv was just deleted, make sure we clean up the docker volume
 	if p.affectDockerVols {
-		dockerClient, err := p.newDockerClient(provisioner)
+		dockerClient, _, err := p.newDockerClient(provisioner)
 		if err != nil {
 			info := fmt.Sprintf("failed to get docker client for %s while trying to delete pv %s: %v", provisioner, pv.Name, err)
 			util.LogError.Print(info)
@@ -320,7 +321,8 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class
 
 	if p.affectDockerVols {
 		var dockerClient *dockervol.DockerVolumePlugin
-		dockerClient, err = p.newDockerClient(class.Provisioner)
+		var dockerOptions map[string]interface{}
+		dockerClient, dockerOptions, err = p.newDockerClient(class.Provisioner)
 		if err != nil {
 			util.LogError.Printf("unable to get docker client for class %v while trying to provision pvc named %s (%s): %s", class, claim.Name, id, err)
 			p.eventRecorder.Event(claim, api_v1.EventTypeWarning, "ProvisionVolumeGetClient",
@@ -335,6 +337,9 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class
 
 		sizeForDockerVolumeinGib := getClaimSizeForFactor(claim, dockerClient, 0)
 		optionsMap := getDockerOptions(params, sizeForDockerVolumeinGib, dockerClient.ListOfStorageResourceOptions)
+
+		// set default docker options if not already set
+		p.setDefaultDockerOptions(optionsMap, params, dockerOptions, dockerClient)
 
 		provisionChain.AppendRunner(&createDockerVol{
 			requestedName: pv.Name,
@@ -370,6 +375,19 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class
 
 }
 
+func (p *Provisioner) setDefaultDockerOptions(optionsMap map[string]interface{}, params map[string]string, dockerOptions map[string]interface{}, dockerClient *dockervol.DockerVolumePlugin) {
+	for k, v := range dockerOptions {
+		util.LogDebug.Printf("processing %s:%v", k, v)
+		_, ok := params[k]
+		if ok == false {
+			util.LogInfo.Printf("setting the docker option %s:%v", k, v)
+			val := reflect.ValueOf(v)
+			optionsMap[k] = val.Interface()
+		}
+	}
+	util.LogDebug.Printf("optionsMap %v", optionsMap)
+}
+
 func limit(watched, parked *uint32, max uint32) {
 	if atomic.LoadUint32(watched) >= max {
 		atomic.AddUint32(parked, 1)
@@ -400,11 +418,11 @@ func getClaimSizeForFactor(claim *api_v1.PersistentVolumeClaim, dockerClient *do
 	return sizeForDockerVolumeinGib
 }
 
-func (p *Provisioner) newDockerClient(provisionerName string) (*dockervol.DockerVolumePlugin, error) {
+func (p *Provisioner) newDockerClient(provisionerName string) (*dockervol.DockerVolumePlugin, map[string]interface{}, error) {
 	driverName := strings.Split(provisionerName, "/")
 	if len(driverName) < 2 {
 		util.LogInfo.Printf("Unable to parse provisioner name %s.", provisionerName)
-		return nil, fmt.Errorf("unable to parse provisioner name %s", provisionerName)
+		return nil, nil, fmt.Errorf("unable to parse provisioner name %s", provisionerName)
 	}
 	configPathName := fmt.Sprintf("%s%s/%s.json", flexVolumeBasePath, strings.Replace(provisionerName, "/", "~", 1), driverName[1])
 	util.LogDebug.Printf("looking for %s", configPathName)
@@ -413,6 +431,7 @@ func (p *Provisioner) newDockerClient(provisionerName string) (*dockervol.Docker
 		strip                        = defaultStripValue
 		listOfStorageResourceOptions = defaultListOfStorageResourceOptions
 		factorForConversion          = defaultfactorForConversion
+		dockerOpts                   = defaultDockerOptions
 	)
 
 	c, err := jconfig.NewConfig(configPathName)
@@ -436,6 +455,19 @@ func (p *Provisioner) newDockerClient(provisionerName string) (*dockervol.Docker
 		if i != 0 {
 			factorForConversion = int(i)
 		}
+		defaultOpts, err := c.GetMapSlice("defaultOptions")
+		if err == nil {
+			util.LogDebug.Printf("parsing defaultOptions %v", defaultOpts)
+			optMap := make(map[string]interface{})
+			for _, values := range defaultOpts {
+				for k, v := range values {
+					optMap[k] = v
+					util.LogDebug.Printf("key %v value %v", k, optMap[k])
+				}
+			}
+			dockerOpts = optMap
+			util.LogDebug.Printf("dockerOptions %v", dockerOpts)
+		}
 
 	}
 	options := &dockervol.Options{
@@ -444,7 +476,7 @@ func (p *Provisioner) newDockerClient(provisionerName string) (*dockervol.Docker
 		ListOfStorageResourceOptions: listOfStorageResourceOptions,
 		FactorForConversion:          factorForConversion,
 	}
-	return dockervol.NewDockerVolumePlugin(options), nil
+	return dockervol.NewDockerVolumePlugin(options), dockerOpts, nil
 }
 
 // block until there are some classes defined in the cluster

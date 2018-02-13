@@ -20,6 +20,10 @@ import (
 	"testing"
 )
 
+var (
+	mapsSlice []map[string]interface{}
+)
+
 var basicTests = []struct {
 	name              string
 	testKey           string
@@ -28,16 +32,18 @@ var basicTests = []struct {
 	resultStringSlice []string
 	resultBool        bool
 	resultBoolError   bool
+	resultMapSlice    []map[string]interface{}
 }{
-	{"get someString", "someString", "some string", 0, nil, false, true},
-	{"get stringNumber", "stringNumber", "23", 23, nil, false, true},
-	{"get actualNumber", "actualNumber", "1.073741824e+10", 10737418240, nil, false, true},
-	{"get badIntNumber", "badIntNumber", "2.3", 2, nil, false, true},
-	{"get notFound", "no key named this", "", 0, nil, false, true},
-	{"get smallNumber", "smallNumber", "40", 40, nil, false, true},
-	{"get someStrings", "someStrings", "[first 2nd c]", 0, []string{"first", "2nd", "c"}, false, true},
-	{"get boolean", "boolean", "true", 0, nil, true, false},
-	{"get stringBool", "stringBool", "True", 0, nil, true, false},
+	{"get someString", "someString", "some string", 0, nil, false, true, nil},
+	{"get stringNumber", "stringNumber", "23", 23, nil, false, true, nil},
+	{"get actualNumber", "actualNumber", "1.073741824e+10", 10737418240, nil, false, true, nil},
+	{"get badIntNumber", "badIntNumber", "2.3", 2, nil, false, true, nil},
+	{"get notFound", "no key named this", "", 0, nil, false, true, nil},
+	{"get smallNumber", "smallNumber", "40", 40, nil, false, true, nil},
+	{"get someStrings", "someStrings", "[first 2nd c]", 0, []string{"first", "2nd", "c"}, false, true, nil},
+	{"get boolean", "boolean", "true", 0, nil, true, false, nil},
+	{"get stringBool", "stringBool", "True", 0, nil, true, false, nil},
+	{"get someMaps", "someMaps", "[map[first:1] map[second:2]]", 0, nil, false, false, append(mapsSlice, map[string]interface{}{"first": 1}, map[string]interface{}{"second": 2})},
 }
 
 func TestBasic(t *testing.T) {
@@ -72,7 +78,19 @@ func TestBasic(t *testing.T) {
 			if b != tc.resultBool {
 				t.Fatalf("%s: GetBool(%v) should return %v; got %v", tc.name, tc.testKey, tc.resultBool, b)
 			}
+			ms, _ := c.GetMapSlice(tc.testKey)
+			testMapSlice(ms, tc.resultMapSlice, t)
 		})
+	}
+}
+
+func testMapSlice(ms []map[string]interface{}, resultSlice []map[string]interface{}, t *testing.T) {
+	if ms != nil && resultSlice != nil {
+		for x := range resultSlice {
+			if ms[x] == nil {
+				t.Errorf("GetMapSlice should return %v; got %v", resultSlice, ms)
+			}
+		}
 	}
 }
 
