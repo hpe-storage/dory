@@ -41,7 +41,7 @@ TEST_ENV  = GOOS=linux GOARCH=amd64
 else
 TEST_ENV  = GOOS=$(GOOS) GOARCH=amd64
 endif
-BUILD_ENV = GOOS=linux GOARCH=amd64
+BUILD_ENV = GOOS=linux GOARCH=amd64 CGO_ENABLED=0
 
 # Add the version and hg commit id to the binary in the form of variables.
 LD_FLAGS = '-X main.Version=$(VERSION) -X main.Commit=$(COMMIT)'

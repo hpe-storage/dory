@@ -35,7 +35,6 @@ import (
 	"nimblestorage/pkg/docker/dockervol"
 	"nimblestorage/pkg/jconfig"
 	"nimblestorage/pkg/util"
-	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -140,10 +139,10 @@ func (p *Provisioner) sendUpdate(t interface{}) {
 	}
 
 	// hold the big lock just to send
-	defer p.id2chanLock.Unlock()
 	p.id2chanLock.Lock()
-	messChan := p.id2chan[id]
+	defer p.id2chanLock.Unlock()
 
+	messChan := p.id2chan[id]
 	if messChan == nil {
 		util.LogDebug.Printf("send: skipping %s, not in map", id)
 		return
@@ -322,7 +321,7 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class
 	if p.affectDockerVols {
 		var dockerClient *dockervol.DockerVolumePlugin
 		var dockerOptions map[string]interface{}
-		dockerClient, dockerOptions, err = p.newDockerClient(class.Provisioner)
+		dockerClient, err = p.newDockerVolumePluginClient(class.Provisioner)
 		if err != nil {
 			util.LogError.Printf("unable to get docker client for class %v while trying to provision pvc named %s (%s): %s", class, claim.Name, id, err)
 			p.eventRecorder.Event(claim, api_v1.EventTypeWarning, "ProvisionVolumeGetClient",
@@ -418,6 +417,7 @@ func getClaimSizeForFactor(claim *api_v1.PersistentVolumeClaim, dockerClient *do
 	return sizeForDockerVolumeinGib
 }
 
+
 func (p *Provisioner) newDockerClient(provisionerName string) (*dockervol.DockerVolumePlugin, map[string]interface{}, error) {
 	driverName := strings.Split(provisionerName, "/")
 	if len(driverName) < 2 {
@@ -439,9 +439,6 @@ func (p *Provisioner) newDockerClient(provisionerName string) (*dockervol.Docker
 		util.LogInfo.Printf("Unable to process config at %s, %v.  Using defaults.", configPathName, err)
 	} else {
 		socketFile = c.GetString("dockerVolumePluginSocketPath")
-		if _, err = os.Stat(socketFile); os.IsNotExist(err) {
-			util.LogError.Printf("Unable to open socket file at %s, it does not exist.", socketFile)
-		}
 
 		b, err := c.GetBool("stripK8sFromOptions")
 		if err == nil {
@@ -476,6 +473,7 @@ func (p *Provisioner) newDockerClient(provisionerName string) (*dockervol.Docker
 		ListOfStorageResourceOptions: listOfStorageResourceOptions,
 		FactorForConversion:          factorForConversion,
 	}
+
 	return dockervol.NewDockerVolumePlugin(options), dockerOpts, nil
 }
 

@@ -96,9 +96,10 @@ func (ar *AttachRequest) getBestName() string {
 }
 
 // Config controls the docker behavior
-func Config(options *dockervol.Options) {
-	dvp = dockervol.NewDockerVolumePlugin(options)
+func Config(options *dockervol.Options) (err error) {
+	dvp, err = dockervol.NewDockerVolumePlugin(options)
 	createVolumes = options.CreateVolumes
+	return err
 }
 
 // BuildJSONResponse marshals a message into the FlexVolume JSON Response.

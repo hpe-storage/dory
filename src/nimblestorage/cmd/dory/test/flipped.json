@@ -1,0 +1,11 @@
+{
+    "logFilePath": "some path",
+    "logDebug": true,
+    "stripK8sFromOptions": false,
+    "dockerVolumePluginSocketPath": "nimble",
+    "createVolumes": false,
+    "enable1.6": true,
+    "listOfStorageResourceOptions" : ["size","sizeInGiB","w","x","y","z"],
+    "factorForConversion": 14,
+    "supportsCapabilities": false
+}

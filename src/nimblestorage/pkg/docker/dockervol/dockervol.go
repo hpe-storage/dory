@@ -19,6 +19,7 @@ package dockervol
 import (
 	"fmt"
 	"nimblestorage/pkg/connectivity"
+	"nimblestorage/pkg/docker/dockerlt"
 	"nimblestorage/pkg/util"
 	"strings"
 	"time"
@@ -57,6 +58,7 @@ type Options struct {
 	CreateVolumes                bool
 	ListOfStorageResourceOptions []string
 	FactorForConversion          int
+	SupportsCapabilities         bool
 }
 
 //DockerVolumePlugin is the client to a specific docker volume plugin
@@ -121,19 +123,72 @@ type DockerVolume struct {
 	Status     map[string]interface{} `json:"Status,omitempty"`
 }
 
+//CapResponse describes the capabilities of the plugin
+type CapResponse struct {
+	Capabilities PluginCapabilities `json:"Capabilities,omitempty"`
+}
+
+//PluginCapabilities includes the scope of the plugin
+type PluginCapabilities struct {
+	Scope string `json:"Scope,omitempty"`
+}
+
 // NewDockerVolumePlugin creates a DockerVolumePlugin which can be used to communicate with
-// a Docker Volume Plugin.  socketPath is the full path to the location of the socket file for the nimble volume plugin.
-// stripK8sFromOptions indicates if k8s namespace should be stripped fromoptions.
-func NewDockerVolumePlugin(options *Options) *DockerVolumePlugin {
+// a Docker Volume Plugin.  options.socketPath can be the full path to the socket file or
+// the name of a Docker V2 plugin.  In the case of the V2 plugin, the name of th plugin
+// is used to look up the full path to the socketfile.
+func NewDockerVolumePlugin(options *Options) (*DockerVolumePlugin, error) {
+	var err error
+	if !strings.HasPrefix(options.SocketPath, "/") {
+		// this is a v2 plugin, so we need to find its socket file
+		options.SocketPath, err = getV2PluginSocket(options.SocketPath, "")
+	}
+	if err != nil {
+		return nil, err
+	}
+
 	if options.SocketPath == "" {
 		options.SocketPath = defaultSocketPath
 	}
-	return &DockerVolumePlugin{
+	dvp := &DockerVolumePlugin{
 		stripK8sOpts: options.StripK8sFromOptions,
 		client:       connectivity.NewSocketClient(options.SocketPath),
 		ListOfStorageResourceOptions: options.ListOfStorageResourceOptions,
 		FactorForConversion:          options.FactorForConversion,
 	}
+
+	if options.SupportsCapabilities {
+		// test connectivity
+		_, err = dvp.Capabilities()
+		if err != nil {
+			return dvp, err
+		}
+	}
+
+	return dvp, nil
+
+}
+
+type empty struct{}
+
+//Capabilities returns the capabilities supported by the plugin
+func (dvp *DockerVolumePlugin) Capabilities() (*CapResponse, error) {
+	var req = &empty{}
+	var res = &CapResponse{}
+
+	err := dvp.driverRun(&connectivity.Request{
+		Action:        "POST",
+		Path:          CapabilitiesURI,
+		Payload:       req,
+		Response:      res,
+		ResponseError: res})
+	if err != nil {
+		util.LogInfo.Printf("unable to get Capabilities - %s\n", err.Error())
+		return nil, err
+	}
+
+	util.LogDebug.Printf("returning %#v", res)
+	return res, nil
 }
 
 //Get a docker volume by docker name returning the response from the driver
@@ -306,4 +361,25 @@ func driverErrorCheck(e Errorer) error {
 		return fmt.Errorf(e.getErr())
 	}
 	return nil
+}
+
+// name is the name of the docker volume plugin.  dockerSocket is the full path to the docker socket.  The default is used if an empty string is passed.
+func getV2PluginSocket(name, dockerSocket string) (string, error) {
+	c := dockerlt.NewDockerClient(dockerSocket)
+	plugins, err := c.PluginsGet()
+
+	if err != nil {
+		return "", fmt.Errorf("failed to get V2 plugins from docker. error=%s", err.Error())
+	}
+
+	for _, plugin := range plugins {
+		if strings.Compare(name, plugin.Name) == 0 || strings.Compare(fmt.Sprintf("%s:latest", name), plugin.Name) == 0 {
+			if !plugin.Enabled {
+				return fmt.Sprintf("/run/docker/plugins/%s/%s", plugin.ID, plugin.Config.Interface.Socket), fmt.Errorf("found Docker V2 Plugin named %s, but it is disabled", name)
+			}
+			return fmt.Sprintf("/run/docker/plugins/%s/%s", plugin.ID, plugin.Config.Interface.Socket), nil
+		}
+	}
+
+	return "", fmt.Errorf("unable to find V2 plugin named %s", name)
 }

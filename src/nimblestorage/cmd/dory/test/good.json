@@ -5,8 +5,7 @@
     "dockerVolumePluginSocketPath": "/run/docker/plugins/nimble.sock",
     "createVolumes": true,
     "enable1.6": false,
-    "listOfStorageResourceOptions" :    ["size","sizeInGiB"],
+    "listOfStorageResourceOptions" : ["size","sizeInGiB"],
     "factorForConversion": 1073741824,
-    "defaultOptions": [{"mountConflictDelay": 30}]
-    }
-
+    "supportsCapabilities": true
+}
