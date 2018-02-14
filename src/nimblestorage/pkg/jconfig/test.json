@@ -6,6 +6,6 @@
     "badIntNumber":2.3,
     "someStrings": ["first", "2nd", "c"],
     "boolean": true,
-    "stringBool": "True"
-
+    "stringBool": "True",
+    "someMaps": [{"first":1}, {"second": 2}]
 }
