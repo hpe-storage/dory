@@ -187,6 +187,5 @@ func (p *Provisioner) newPersistentVolume(pvName string, params map[string]strin
 			},
 		},
 	}
-
 	return pv, nil
 }

@@ -19,6 +19,7 @@ package main
 import (
 	"fmt"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"nimblestorage/pkg/k8s/provisioner"
 	"nimblestorage/pkg/util"
@@ -34,10 +35,13 @@ func main() {
 	kubeConfig := os.Args[1]
 	config, err := clientcmd.BuildConfigFromFlags("", kubeConfig)
 	if err != nil {
-		fmt.Printf("Error getting config from %s - %s\n", kubeConfig, err.Error())
-		os.Exit(1)
+		fmt.Printf("Error getting config from file %s - %s\n", kubeConfig, err.Error())
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			fmt.Printf("Error getting config cluster - %s\n", err.Error())
+			os.Exit(1)
+		}
 	}
-
 	provisionerName := "dev.hpe.com"
 	if len(os.Args) > 2 {
 		provisionerName = os.Args[2]

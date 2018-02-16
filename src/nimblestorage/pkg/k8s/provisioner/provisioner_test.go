@@ -180,3 +180,14 @@ func TestGetBestVolName(t *testing.T) {
 		t.Error("volname should not be empty")
 	}
 }
+
+func TestEmptyVolumeCreate(t *testing.T) {
+	options := &dockervol.Options{StripK8sFromOptions: true}
+	dvp, _ := dockervol.NewDockerVolumePlugin(options)
+	optionsMap := make(map[string]interface{})
+	optionsMap["description"] = "empty volume"
+	_, err := dvp.Create("", optionsMap)
+	if err == nil {
+		t.Error("expected error on empty volume name")
+	}
+}

@@ -71,6 +71,7 @@ help:
 	@echo "    debug          - Display make's view of the world."
 	@echo "    dory           - Build dory (FlexVolume driver)."
 	@echo "    doryd          - Build doryd (Provisioner)."
+	@echo "    doryd_docker   - Build doryd (Provisioner) docker image."
 
 .PHONY: debug
 debug:
@@ -136,3 +137,9 @@ doryd: bin pkg lint; $(info $(A1) dory)
 	@echo "$(A2) sha256sum doryd"
 	sha256sum  bin/doryd > bin/doryd.sha256sum
 	@cat bin/doryd.sha256sum
+
+doryd_docker: doryd; $(info $(A1) doryd_docker)
+	@echo "$(A2) rm current doryd image"
+	-docker image rm kube-storage-controller:edge
+	@echo "$(A2) build doryd image"
+	-docker build -t kube-storage-controller:edge -f src/nimblestorage/cmd/doryd/Dockerfile .

@@ -250,7 +250,7 @@ func (p *Provisioner) deleteVolume(pv *api_v1.PersistentVolume, rmPV bool) {
 
 	// if the pv was just deleted, make sure we clean up the docker volume
 	if p.affectDockerVols {
-		dockerClient, _, err := p.newDockerClient(provisioner)
+		dockerClient, _, err := p.newDockerVolumePluginClient(provisioner)
 		if err != nil {
 			info := fmt.Sprintf("failed to get docker client for %s while trying to delete pv %s: %v", provisioner, pv.Name, err)
 			util.LogError.Print(info)
@@ -293,13 +293,12 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class
 	// find a name...
 	volName := p.getBestVolName(claim, class)
 
-	// create a copy of the storage class options
+	// create a copy of the storage class options for NLT-1172
 	// TODO when we support pvc overrides, make the changes here
 	params := make(map[string]string)
 	for key, value := range class.Parameters {
 		params[key] = value
 	}
-
 	// add name to options
 	params["name"] = volName
 
@@ -308,7 +307,6 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class
 		util.LogError.Printf("error building pv from %v %v and %v. err=%v", claim, params, class, err)
 		return
 	}
-
 	util.LogDebug.Printf("pv to be created %v", pv)
 
 	// slow down a create storm
@@ -321,10 +319,10 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class
 	if p.affectDockerVols {
 		var dockerClient *dockervol.DockerVolumePlugin
 		var dockerOptions map[string]interface{}
-		dockerClient, err = p.newDockerVolumePluginClient(class.Provisioner)
+		dockerClient, dockerOptions, err = p.newDockerVolumePluginClient(class.Provisioner)
 		if err != nil {
 			util.LogError.Printf("unable to get docker client for class %v while trying to provision pvc named %s (%s): %s", class, claim.Name, id, err)
-			p.eventRecorder.Event(claim, api_v1.EventTypeWarning, "ProvisionVolumeGetClient",
+			p.eventRecorder.Event(class, api_v1.EventTypeWarning, "ProvisionVolumeGetClient",
 				fmt.Sprintf("failed to get docker volume client for class %s while trying to provision claim %s (%s): %s", class.Name, claim.Name, id, err))
 			return
 		}
@@ -358,11 +356,11 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class
 		p:         p,
 	})
 
-	p.eventRecorder.Event(claim, api_v1.EventTypeNormal, "ProvisionStorage", fmt.Sprintf("%s provisioning storage for pvc %s (%s) using class %s", class.Provisioner, claim.Name, id, class.Name))
+	p.eventRecorder.Event(class, api_v1.EventTypeNormal, "ProvisionStorage", fmt.Sprintf("%s provisioning storage for pvc %s (%s) using class %s", class.Provisioner, claim.Name, id, class.Name))
 	err = provisionChain.Execute()
 
 	if err != nil {
-		p.eventRecorder.Event(claim, api_v1.EventTypeWarning, "ProvisionStorage",
+		p.eventRecorder.Event(class, api_v1.EventTypeWarning, "ProvisionStorage",
 			fmt.Sprintf("failed to create volume for claim %s with class %s: %s", claim.Name, class.Name, err))
 	}
 
@@ -417,8 +415,7 @@ func getClaimSizeForFactor(claim *api_v1.PersistentVolumeClaim, dockerClient *do
 	return sizeForDockerVolumeinGib
 }
 
-
-func (p *Provisioner) newDockerClient(provisionerName string) (*dockervol.DockerVolumePlugin, map[string]interface{}, error) {
+func (p *Provisioner) newDockerVolumePluginClient(provisionerName string) (*dockervol.DockerVolumePlugin, map[string]interface{}, error) {
 	driverName := strings.Split(provisionerName, "/")
 	if len(driverName) < 2 {
 		util.LogInfo.Printf("Unable to parse provisioner name %s.", provisionerName)
@@ -433,13 +430,11 @@ func (p *Provisioner) newDockerClient(provisionerName string) (*dockervol.Docker
 		factorForConversion          = defaultfactorForConversion
 		dockerOpts                   = defaultDockerOptions
 	)
-
 	c, err := jconfig.NewConfig(configPathName)
 	if err != nil {
 		util.LogInfo.Printf("Unable to process config at %s, %v.  Using defaults.", configPathName, err)
 	} else {
 		socketFile = c.GetString("dockerVolumePluginSocketPath")
-
 		b, err := c.GetBool("stripK8sFromOptions")
 		if err == nil {
 			strip = b
@@ -456,6 +451,7 @@ func (p *Provisioner) newDockerClient(provisionerName string) (*dockervol.Docker
 		if err == nil {
 			util.LogDebug.Printf("parsing defaultOptions %v", defaultOpts)
 			optMap := make(map[string]interface{})
+
 			for _, values := range defaultOpts {
 				for k, v := range values {
 					optMap[k] = v
@@ -465,7 +461,6 @@ func (p *Provisioner) newDockerClient(provisionerName string) (*dockervol.Docker
 			dockerOpts = optMap
 			util.LogDebug.Printf("dockerOptions %v", dockerOpts)
 		}
-
 	}
 	options := &dockervol.Options{
 		SocketPath:                   socketFile,
@@ -473,8 +468,8 @@ func (p *Provisioner) newDockerClient(provisionerName string) (*dockervol.Docker
 		ListOfStorageResourceOptions: listOfStorageResourceOptions,
 		FactorForConversion:          factorForConversion,
 	}
-
-	return dockervol.NewDockerVolumePlugin(options), dockerOpts, nil
+	client, er := dockervol.NewDockerVolumePlugin(options)
+	return client, dockerOpts, er
 }
 
 // block until there are some classes defined in the cluster
@@ -491,14 +486,11 @@ func (p *Provisioner) waitForClasses() {
 }
 
 func (p *Provisioner) getBestVolName(claim *api_v1.PersistentVolumeClaim, class *storage_v1.StorageClass) string {
-	if claim.Spec.VolumeName != "" {
-		return claim.Spec.VolumeName
+	if claim.Annotations[p.dockerVolNameAnnotation] != "" {
+		return fmt.Sprintf("%s-%s", claim.Namespace, claim.Annotations[p.dockerVolNameAnnotation])
 	}
 	if claim.GetGenerateName() != "" {
-		return claim.GetGenerateName()
-	}
-	if claim.Annotations[p.dockerVolNameAnnotation] != "" {
-		return claim.Annotations[p.dockerVolNameAnnotation]
+		return fmt.Sprintf("%s-%s", claim.Namespace, claim.GetGenerateName())
 	}
 	return fmt.Sprintf("%s-%s", class.Name, claim.UID)
 }
@@ -526,17 +518,7 @@ func (c *createDockerVol) Run() (name interface{}, err error) {
 	c.returnedName, err = c.client.Create(c.requestedName, c.options)
 	if err != nil {
 		util.LogError.Printf("failed to create docker volume, error = %s", err.Error())
-		// sleep a few seconds
-		time.Sleep(time.Duration(rand.Intn(30)) * time.Second)
-		// we may have timed out (this time or the previous)
-		// try to get the volume by name
-		resp, err2 := c.client.Get(c.requestedName)
-		if err2 != nil {
-			util.LogInfo.Printf("failed to get docker volume after failed create, error = %s", err2.Error())
-			// if we didn't get the volume, return the original error
-			return nil, err
-		}
-		c.returnedName = resp.Volume.Name
+		return nil, err
 	}
 	util.LogInfo.Printf("created docker volume named %s", c.returnedName)
 

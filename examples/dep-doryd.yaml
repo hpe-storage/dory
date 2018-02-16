@@ -28,7 +28,7 @@ spec:
           effect: NoSchedule
       containers:
         -
-          image: nimblestorage/doryd
+          image: nimblestorage/kube-storage-controller:edge
           imagePullPolicy: Always
           name: dory
           volumeMounts:
