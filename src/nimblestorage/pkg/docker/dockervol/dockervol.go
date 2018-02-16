@@ -203,7 +203,7 @@ func (dvp *DockerVolumePlugin) Get(name string) (*GetResponse, error) {
 		Response:      res,
 		ResponseError: res})
 	if err != nil {
-		util.LogInfo.Printf("unable to get docker volume using %s - %s\n", name, err.Error())
+		util.LogInfo.Printf("unable to get docker volume using %s - %s response - %v\n", name, err.Error(), res)
 		return nil, err
 	}
 
@@ -227,7 +227,7 @@ func (dvp *DockerVolumePlugin) List() (*GetListResponse, error) {
 		Response:      res,
 		ResponseError: res})
 	if err != nil {
-		util.LogInfo.Printf("unable to list docker volumes - %s\n", err.Error())
+		util.LogInfo.Printf("unable to list docker volumes - %s response - %v\n", err.Error(), res)
 		return nil, err
 	}
 
@@ -259,7 +259,7 @@ func (dvp *DockerVolumePlugin) Create(name string, options map[string]interface{
 		Response:      res,
 		ResponseError: res})
 	if err != nil {
-		util.LogError.Printf("unable to create docker volume using %v & %v - %s\n", name, options, err.Error())
+		util.LogError.Printf("unable to create docker volume using %v & %v - %s response - %v\n", name, options, err.Error(), res)
 		return "", err
 	}
 
@@ -314,7 +314,7 @@ func (dvp *DockerVolumePlugin) Delete(name string) error {
 		Response:      res,
 		ResponseError: res})
 	if err != nil {
-		util.LogError.Printf("%s failed %v - %s\n", RemoveURI, name, err.Error())
+		util.LogError.Printf("%s failed %v - %s response - %v\n", RemoveURI, name, err.Error(), res)
 		return err
 	}
 
@@ -340,7 +340,7 @@ func (dvp *DockerVolumePlugin) mounter(name, mountID string, path string) (strin
 		Response:      res,
 		ResponseError: res})
 	if err != nil {
-		util.LogError.Printf("%s failed %v & %v - %s\n", path, name, mountID, err.Error())
+		util.LogError.Printf("%s failed %v & %v - %s response - %v\n", path, name, mountID, err.Error(), res)
 		return "", err
 	}
 
