@@ -84,7 +84,6 @@ tools: ; $(info $(A1) tools)
 	export $(GOENV) && go get -u github.com/Masterminds/glide
 	export $(GOENV) && go install github.com/Masterminds/glide
 
-.PHONY: vendor
 vendor: tools; $(info $(A1) vendor)
 	@echo "$(A2) glide install"
 	export $(GOENV) && glide install
