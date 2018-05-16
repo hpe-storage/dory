@@ -18,11 +18,11 @@ package main
 
 import (
 	"fmt"
+	"github.com/hpe-storage/dory/common/k8s/provisioner"
+	"github.com/hpe-storage/dory/common/util"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"nimblestorage/pkg/k8s/provisioner"
-	"nimblestorage/pkg/util"
 	"os"
 )
 

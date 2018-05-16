@@ -17,7 +17,7 @@ limitations under the License.
 package linux
 
 import (
-	"nimblestorage/pkg/util"
+	"github.com/hpe-storage/dory/common/util"
 	"strings"
 )
 

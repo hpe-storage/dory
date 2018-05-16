@@ -20,10 +20,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/hpe-storage/dory/common/util"
 	"io"
 	"net"
 	"net/http"
-	"nimblestorage/pkg/util"
 	"strings"
 	"time"
 )

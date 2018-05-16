@@ -17,7 +17,7 @@ package chain
 
 import (
 	"fmt"
-	"nimblestorage/pkg/util"
+	"github.com/hpe-storage/dory/common/util"
 	"testing"
 )
 

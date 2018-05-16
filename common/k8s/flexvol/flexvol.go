@@ -19,9 +19,9 @@ package flexvol
 import (
 	"encoding/json"
 	"fmt"
-	"nimblestorage/pkg/docker/dockervol"
-	"nimblestorage/pkg/linux"
-	"nimblestorage/pkg/util"
+	"github.com/hpe-storage/dory/common/docker/dockervol"
+	"github.com/hpe-storage/dory/common/linux"
+	"github.com/hpe-storage/dory/common/util"
 	"os"
 	"path/filepath"
 	"regexp"

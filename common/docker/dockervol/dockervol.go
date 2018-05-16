@@ -18,9 +18,9 @@ package dockervol
 
 import (
 	"fmt"
-	"nimblestorage/pkg/connectivity"
-	"nimblestorage/pkg/docker/dockerlt"
-	"nimblestorage/pkg/util"
+	"github.com/hpe-storage/dory/common/connectivity"
+	"github.com/hpe-storage/dory/common/docker/dockerlt"
+	"github.com/hpe-storage/dory/common/util"
 	"strings"
 	"time"
 )

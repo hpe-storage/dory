@@ -18,6 +18,10 @@ package provisioner
 
 import (
 	"fmt"
+	"github.com/hpe-storage/dory/common/chain"
+	"github.com/hpe-storage/dory/common/docker/dockervol"
+	"github.com/hpe-storage/dory/common/jconfig"
+	"github.com/hpe-storage/dory/common/util"
 	uuid "github.com/satori/go.uuid"
 	resource_v1 "k8s.io/apimachinery/pkg/api/resource"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,10 +35,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"math/rand"
-	"nimblestorage/pkg/chain"
-	"nimblestorage/pkg/docker/dockervol"
-	"nimblestorage/pkg/jconfig"
-	"nimblestorage/pkg/util"
 	"reflect"
 	"strings"
 	"sync"

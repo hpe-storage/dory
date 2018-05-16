@@ -18,7 +18,7 @@ package flexvol
 
 import (
 	"fmt"
-	"nimblestorage/pkg/util"
+	"github.com/hpe-storage/dory/common/util"
 )
 
 // Handle the conversion of flexvol commands and args to docker volume

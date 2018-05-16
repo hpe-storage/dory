@@ -18,10 +18,10 @@ package main
 
 import (
 	"fmt"
-	"nimblestorage/pkg/docker/dockervol"
-	"nimblestorage/pkg/jconfig"
-	flexvol "nimblestorage/pkg/k8s/flexvol"
-	"nimblestorage/pkg/util"
+	"github.com/hpe-storage/dory/common/docker/dockervol"
+	"github.com/hpe-storage/dory/common/jconfig"
+	flexvol "github.com/hpe-storage/dory/common/k8s/flexvol"
+	"github.com/hpe-storage/dory/common/util"
 	"os"
 	"path/filepath"
 )

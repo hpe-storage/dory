@@ -18,9 +18,9 @@ package provisioner
 
 import (
 	"fmt"
+	"github.com/hpe-storage/dory/common/chain"
+	"github.com/hpe-storage/dory/common/util"
 	api_v1 "k8s.io/client-go/pkg/api/v1"
-	"nimblestorage/pkg/chain"
-	"nimblestorage/pkg/util"
 	"reflect"
 	"time"
 )

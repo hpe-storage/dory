@@ -17,8 +17,8 @@ limitations under the License.
 package dockerlt
 
 import (
-	"nimblestorage/pkg/connectivity"
-	"nimblestorage/pkg/util"
+	"github.com/hpe-storage/dory/common/connectivity"
+	"github.com/hpe-storage/dory/common/util"
 )
 
 const (

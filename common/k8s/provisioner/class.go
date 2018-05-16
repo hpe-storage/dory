@@ -18,6 +18,7 @@ package provisioner
 
 import (
 	"fmt"
+	"github.com/hpe-storage/dory/common/util"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
@@ -25,7 +26,6 @@ import (
 	storage_v1 "k8s.io/client-go/pkg/apis/storage/v1"
 	storage_v1beta1 "k8s.io/client-go/pkg/apis/storage/v1beta1"
 	"k8s.io/client-go/tools/cache"
-	"nimblestorage/pkg/util"
 )
 
 func (p *Provisioner) listAllClasses(options meta_v1.ListOptions) (runtime.Object, error) {
