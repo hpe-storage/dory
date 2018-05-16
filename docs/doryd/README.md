@@ -9,17 +9,17 @@ Doryd is written in Go and requires golang on your machine. The following exampl
 ```
 sudo subscription-manager repos --enable=rhel-7-server-optional-rpms
 sudo yum install -y golang make
-git clone https://github.com/hpe-storage/dory.git
-make gettools
+git clone https://github.com/hpe-storage/dory.git $GOPATH/src/github.com/hpe-storage/dory
+cd $GOPATH/src/github.com/hpe-storage/dory
 make vendor
 make doryd
 ```
 
-You should end up with a `doryd` executable in the `./bin` directory.
+You should end up with a `doryd` executable in the `$GOPATH/src/github.com/hpe-storage/dory` directory.
 
 Optionally, you may build a doryd container:
 ```
-docker build -t doryd:latest build/docker/doryd/Dockerfile .
+make doryd_docker
 ```
 
 **Hint:** Go is available through the [EPEL](https://fedoraproject.org/wiki/EPEL) repository for .rpm based distributions and a `golang` package is part of the official Ubuntu repositories.
@@ -76,7 +76,7 @@ parameters:
 EOF
 ```
 
-An end-user may then reference the Storage Class when creating a Persistent Volume Claim: 
+An end-user may then reference the Storage Class when creating a Persistent Volume Claim:
 ```
 kubectl create -f- <<EOF
 ---
@@ -94,7 +94,7 @@ spec:
 EOF
 ```
 
-The key here is that the end-user have no interest in knowing any underlying storage terminology. The admin may change the entire Storage Class and backend vendor without breakage for the end-user. 
+The key here is that the end-user have no interest in knowing any underlying storage terminology. The admin may change the entire Storage Class and backend vendor without breakage for the end-user.
 
 # Licensing
 Doryd is licensed under the Apache License, Version 2.0. Please see [LICENSE](../../LICENSE) for the full license text.

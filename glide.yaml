@@ -1,4 +1,4 @@
-package: nimblestorage
+package: github.com/hpe-storage/dory
 import:
 - package: github.com/satori/go.uuid
   version: ~1.1.0
