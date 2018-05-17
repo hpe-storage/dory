@@ -8,7 +8,12 @@
 /bin/*
 /src/github.com/*
 
-.vscode/*
+.vscode
 
-src/nimblestorage/cmd/dory/dory
-src/nimblestorage/vendor/*
+cmd/dory/dory
+vendor/*
+
+dory
+dory.sha256sum
+doryd
+doryd.sha256sum

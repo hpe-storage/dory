@@ -15,20 +15,11 @@
 VERSION = 1.1.0
 
 # Where our code lives
-PKG_PATH = src/nimblestorage/pkg/
-CMD_PATH = src/nimblestorage/cmd/
+PKG_PATH = ./common/
+CMD_PATH = ./cmd/
 
 # This is the last 8 char of the commit id we're building from
 COMMIT = $(shell git rev-parse HEAD| cut -b-8)
-
-# This adds this repo as an entry in the GOPATH.  This allows us to have a local
-#     GOPATH that contains the go tooling so we don't have to download
-#     it again each time we build.
-ifndef $(GOPATH)
-GOPATH = ${PWD}
-else
-GOPATH = $(GOPATH=$$GOPATH:{PWD} && echo $$GOPATH)
-endif
 
 # The version of make for OSX doesn't allow us to export, so
 # we add these variables to the env in each invocation.
@@ -51,7 +42,7 @@ LD_FLAGS = '-X main.Version=$(VERSION) -X main.Commit=$(COMMIT)'
 LINTER_FLAGS = --vendor --disable-all --enable=vet --enable=vetshadow --enable=golint --enable=ineffassign --enable=goconst --enable=deadcode --enable=dupl --enable=varcheck --enable=gocyclo --enable=misspell
 
 # list of packages
-PACKAGE_LIST =   $(shell export $(GOENV) && go list ./$(PKG_PATH)...)
+PACKAGE_LIST =   $(shell export $(GOENV) && go list ./$(PKG_PATH)...| grep -v vendor)
 # list of commands
 COMMAND_LIST =   $(shell export $(GOENV) && go list ./$(CMD_PATH)...)
 
@@ -63,11 +54,11 @@ A3 = $(shell printf "»»»")
 .PHONY: help
 help:
 	@echo "Targets:"
-	@echo "    gettools       - Download and install go tooling required to build."
+	@echo "    tools          - Download and install go tooling required to build."
 	@echo "    vendor         - Download dependancies."
 	@echo "    lint           - Static analysis of source code.  Note that this must pass in order to build."
 	@echo "    test           - Run unit tests."
-	@echo "    clean          - Remove bin and pkg."
+	@echo "    clean          - Remove binaries."
 	@echo "    debug          - Display make's view of the world."
 	@echo "    dory           - Build dory (FlexVolume driver)."
 	@echo "    doryd          - Build doryd (Provisioner)."
@@ -84,7 +75,7 @@ debug:
 	@echo "    BUILD_ENV: $(BUILD_ENV)"
 	@echo "    GOENV:     $(GOENV)"
 
-gettools: ; $(info $(A1) gettools)
+tools: ; $(info $(A1) tools)
 	@echo "$(A2) get gometalinter"
 	export $(GOENV) && go get -u github.com/alecthomas/gometalinter
 	@echo "$(A2) install gometalinter"
@@ -93,10 +84,9 @@ gettools: ; $(info $(A1) gettools)
 	export $(GOENV) && go get -u github.com/Masterminds/glide
 	export $(GOENV) && go install github.com/Masterminds/glide
 
-.PHONY: vendor
-vendor: gettools; $(info $(A1) vendor)
+vendor: tools; $(info $(A1) vendor)
 	@echo "$(A2) glide install"
-	export $(GOENV) && cd src/nimblestorage && glide install
+	export $(GOENV) && glide install
 
 .PHONY: lint
 lint: ; $(info $(A1) lint)
@@ -107,39 +97,37 @@ lint: ; $(info $(A1) lint)
 
 .PHONY: clean
 clean: ; $(info $(A1) clean)
-	@echo "$(A2) remove bin"
-	@rm -rf bin
-	@echo "$(A2) remove pkg"
-	@rm -rf pkg
+	@echo "$(A2) remove dory"
+	@rm -f dory
+	@rm -f dory.sha256sum
+	@echo "$(A2) remove doryd"
+	@rm -f doryd
+	@rm -f doryd.sha256sum
 
-bin: ; $(info $(A1) mkdir bin)
-	@mkdir bin
-
-pkg: ; $(info $(A1) mkdir pkg)
-	@mkdir pkg
-
+.PHONY: test
 test: ; $(info $(A1) test)
 	@echo "$(A2) Package unit tests"
-	for pkg in $(PACKAGE_LIST); do echo "»»» Testing $$pkg:" && export $(GOENV) $(TEST_ENV) && go test -cover ./src/$$pkg/; done
+	for pkg in $(PACKAGE_LIST); do echo "»»» Testing $$pkg:" && export $(GOENV) $(TEST_ENV) && go test -cover $$pkg; done
 	@echo "$(A2) Command unit tests"
-	for cmd in $(COMMAND_LIST); do echo "»»» Testing $$cmd:" && export $(GOENV) $(TEST_ENV) && go test -cover ./src/$$cmd/; done
+	for cmd in $(COMMAND_LIST); do echo "»»» Testing $$cmd:" && export $(GOENV) $(TEST_ENV) && go test -cover $$cmd; done
 
-dory: bin pkg lint; $(info $(A1) dory)
+dory: lint; $(info $(A1) dory)
 	@echo "$(A2) build dory"
-	cd bin && export $(GOENV) $(BUILD_ENV) && go build -ldflags $(LD_FLAGS) ../$(CMD_PATH)dory/dory.go
+	export $(GOENV) $(BUILD_ENV) && go build -ldflags $(LD_FLAGS) $(CMD_PATH)dory/dory.go
 	@echo "$(A2) sha256sum dory"
-	sha256sum  bin/dory > bin/dory.sha256sum
-	@cat bin/dory.sha256sum
+	sha256sum  dory > dory.sha256sum
+	@cat dory.sha256sum
 
-doryd: bin pkg lint; $(info $(A1) dory)
+doryd: lint; $(info $(A1) dory)
 	@echo "$(A2) build doryd"
-	cd bin && export $(GOENV) $(BUILD_ENV) && go build -ldflags $(LD_FLAGS) ../$(CMD_PATH)doryd/doryd.go
+	export $(GOENV) $(BUILD_ENV) && go build -ldflags $(LD_FLAGS) $(CMD_PATH)doryd/doryd.go
 	@echo "$(A2) sha256sum doryd"
-	sha256sum  bin/doryd > bin/doryd.sha256sum
-	@cat bin/doryd.sha256sum
+	sha256sum  doryd > doryd.sha256sum
+	@cat doryd.sha256sum
 
+.PHONY: doryd_docker
 doryd_docker: doryd; $(info $(A1) doryd_docker)
 	@echo "$(A2) rm current doryd image"
 	-docker image rm kube-storage-controller:edge
 	@echo "$(A2) build doryd image"
-	-docker build -t kube-storage-controller:edge -f src/nimblestorage/cmd/doryd/Dockerfile .
+	docker build -t kube-storage-controller:edge -f ./build/docker/doryd/Dockerfile .
