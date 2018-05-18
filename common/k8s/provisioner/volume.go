@@ -116,11 +116,31 @@ func getPersistentVolume(t interface{}) (*api_v1.PersistentVolume, error) {
 		return &t, nil
 	}
 }
+func (p *Provisioner) handleCloneOfPVC(pv *api_v1.PersistentVolume, key string, value string) (string, error) {
+	// get the pv corresponding to this pvc and substitute with pv (docker volume name)
+	util.LogDebug.Printf("handling %s with pvcName %s", cloneOfPVC, value)
+	claim, err := p.getClaimFromPVCName(pv, value)
+	if err != nil {
+		return "", err
+	}
+	if claim == nil || claim.Spec.VolumeName == "" {
+		return "", fmt.Errorf("no volume found for claim %s", value)
+	}
+	return claim.Spec.VolumeName, nil
+}
 
-func getDockerOptions(params map[string]string, claimSizeinGiB int, listOfOptions []string) map[string]interface{} {
+func (p *Provisioner) getDockerOptions(params map[string]string, pv *api_v1.PersistentVolume, claimSizeinGiB int, listOfOptions []string) map[string]interface{} {
 	dockOpts := make(map[string]interface{}, len(params))
 	foundSizeKey := false
 	for key, value := range params {
+		if key == cloneOfPVC {
+			pvName, err := p.handleCloneOfPVC(pv, key, value)
+			if err == nil {
+				util.LogDebug.Printf("setting key : cloneOf value : %v", pvName)
+				dockOpts["cloneOf"] = pvName
+			}
+			continue
+		}
 		dockOpts[key] = value
 		util.LogDebug.Printf("storageclass option key:%v value:%v", key, value)
 		if claimSizeinGiB > 0 && contains(listOfOptions, key) {

@@ -25,6 +25,7 @@ import (
 	api_v1 "k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/tools/cache"
 	"strings"
+	"time"
 )
 
 func (p *Provisioner) listAllClaims(options meta_v1.ListOptions) (runtime.Object, error) {
@@ -36,13 +37,13 @@ func (p *Provisioner) watchAllClaims(options meta_v1.ListOptions) (watch.Interfa
 }
 
 //NewClaimController provides a controller that watches for PersistentVolumeClaims and takes action on them
-func (p *Provisioner) newClaimController() cache.Controller {
+func (p *Provisioner) newClaimController() (cache.Store, cache.Controller) {
 	claimListWatch := &cache.ListWatch{
 		ListFunc:  p.listAllClaims,
 		WatchFunc: p.watchAllClaims,
 	}
 
-	_, informer := cache.NewInformer(
+	return cache.NewInformer(
 		claimListWatch,
 		&api_v1.PersistentVolumeClaim{},
 		resyncPeriod,
@@ -51,7 +52,6 @@ func (p *Provisioner) newClaimController() cache.Controller {
 			UpdateFunc: p.updatedClaim,
 		},
 	)
-	return informer
 }
 
 func (p *Provisioner) addedClaim(t interface{}) {
@@ -123,4 +123,56 @@ func getPersistentVolumeClaim(t interface{}) (*api_v1.PersistentVolumeClaim, err
 	case api_v1.PersistentVolumeClaim:
 		return &t, nil
 	}
+}
+
+func (p *Provisioner) getClaimFromPVCName(pv *api_v1.PersistentVolume, claimName string) (*api_v1.PersistentVolumeClaim, error) {
+	util.LogDebug.Printf("getClaimFromName called with %s", claimName)
+	i := 0
+	for len(p.claimsStore.List()) < 1 {
+		if i > maxWaitForClaims {
+			p.eventRecorder.Event(pv, api_v1.EventTypeWarning, "ProvisionStorage",
+				fmt.Sprintf("clone of a pvc(%s) for namespace(%s) was requested but we couldn't find it", claimName, pv.Namespace))
+			util.LogInfo.Printf("No Claims found after waiting for %d seconds", maxWaitForClaims)
+			return nil, fmt.Errorf("No Claims found after waiting for %d seconds", maxWaitForClaims)
+		}
+		time.Sleep(time.Second)
+		i++
+	}
+	for _, pvc := range p.claimsStore.List() {
+		claim, err := getPersistentVolumeClaim(pvc)
+		if err != nil {
+			return nil, err
+		}
+		util.LogDebug.Printf("handling claim(%v) with namespace(%s) and status(%s)", claim.Name, claim.Namespace, claim.Status.Phase)
+		if claim.Name == claimName && claim.Namespace == pv.Namespace && claim.Status.Phase == api_v1.ClaimBound {
+			util.LogDebug.Printf("claim(%s) matched claimName(%s) for namespace(%s)", claim.Name, claimName, claim.Namespace)
+			return claim, nil
+		}
+	}
+	// if reached here it means no claim found
+	util.LogError.Printf("clone of a pvc(%s) for namespace(%s) was requested but we couldn't find it", claimName, pv.Namespace)
+	p.eventRecorder.Event(pv, api_v1.EventTypeWarning, "ProvisionStorage",
+		fmt.Sprintf("clone of a pvc(%s) for namespace(%s) was requested but we couldn't find it", claimName, pv.Namespace))
+	return nil, nil
+
+}
+
+func (p *Provisioner) getClaimOverrideOptions(claim *api_v1.PersistentVolumeClaim, overrides []string, optionsMap map[string]interface{}) map[string]interface{} {
+	util.LogDebug.Printf("handling getClaimOverrideOptions for %s", p.namePrefix)
+	provisionerName := p.namePrefix
+	for _, override := range overrides {
+		util.LogDebug.Printf("handling override :%v", override)
+		for key, annotation := range claim.Annotations {
+			util.LogDebug.Printf("handling annotation key :%v val :%v", key, annotation)
+			if strings.HasPrefix(strings.ToLower(key), provisionerName+strings.ToLower(override)) {
+				util.LogDebug.Printf("annotation key :%v val :%v matched override :%v", key, annotation, override)
+				if valOpt, ok := optionsMap[override]; ok {
+					util.LogInfo.Printf("key %v exist with val %v, overriding with pvc annotation %v", override, valOpt, annotation)
+				}
+				util.LogDebug.Printf("adding key %v val :%v to docker opts", override, annotation)
+				optionsMap[override] = annotation
+			}
+		}
+	}
+	return optionsMap
 }

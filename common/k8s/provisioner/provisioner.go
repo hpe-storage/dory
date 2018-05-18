@@ -43,17 +43,21 @@ import (
 )
 
 const (
-	dockerVolumeName   = "docker-volume-name"
-	flexVolumeBasePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
-	k8sProvisionedBy   = "pv.kubernetes.io/provisioned-by"
-	chainTimeout       = 2 * time.Minute
-	chainRetries       = 2
+	dockerVolumeName      = "docker-volume-name"
+	flexVolumeBasePath    = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
+	k8sProvisionedBy      = "pv.kubernetes.io/provisioned-by"
+	k8sProvisionedByClaim = "volume.beta.kubernetes.io/storage-provisioner"
+	chainTimeout          = 2 * time.Minute
+	chainRetries          = 2
 	//TODO allow this to be set per docker volume driver
 	maxCreates = 4
 	//TODO allow this to be set per docker volume driver
 	maxDeletes                 = 4
 	defaultfactorForConversion = 1073741824
 	defaultStripValue          = true
+	maxWaitForClaims           = 60
+	allowOverrides             = "allowOverrides"
+	cloneOfPVC                 = "cloneOfPVC"
 )
 
 var (
@@ -74,6 +78,7 @@ type Provisioner struct {
 	serverVersion *version.Info
 	// classStore provides access to StorageClasses on the cluster
 	classStore              cache.Store
+	claimsStore             cache.Store
 	id2chan                 map[string]chan *updateMessage
 	id2chanLock             *sync.Mutex
 	affectDockerVols        bool
@@ -194,6 +199,65 @@ func NewProvisioner(clientSet *kubernetes.Clientset, provisionerName string, aff
 	}
 }
 
+// update the existing volume's metadata for the claims
+func (p *Provisioner) updateDockerVolumeMetadata(store cache.Store) {
+	util.LogDebug.Print("updateDockerVolumeMetadata called")
+	optionsMap := make(map[string]interface{})
+	optionsMap["manager"] = p.namePrefix
+	util.LogDebug.Printf("update optionsMap #%v", optionsMap)
+
+	i := 0
+	for len(store.List()) < 1 {
+		if i > maxWaitForClaims {
+			util.LogInfo.Printf("No Claims found after waiting for %d seconds. Ignoring update", maxWaitForClaims)
+			return
+		}
+		time.Sleep(time.Second)
+		i++
+	}
+	for _, pvc := range store.List() {
+		claim, err := getPersistentVolumeClaim(pvc)
+		if err != nil {
+			util.LogDebug.Printf("unable to retrieve the claim for %v", pvc)
+			continue
+		}
+		util.LogDebug.Printf("handling claim %v", claim)
+		className := getClaimClassName(claim)
+		// update the metadata for only the provisioner matched claims
+		if strings.HasPrefix(claim.Annotations[k8sProvisionedByClaim], optionsMap["manager"].(string)) {
+			class, err := p.getClass(className)
+			if err != nil {
+				util.LogDebug.Printf("unable to retrieve the class object for claim %v", claim.Name)
+				continue
+			}
+			util.LogDebug.Printf("handling update for claim %v class %v", claim.Name, className)
+			err = p.retryUpdateVolume(claim, class, optionsMap)
+			if err != nil {
+				// ignore update for this volume after retries and continue with other volumes
+				util.LogDebug.Printf("unable to update volume %v Err: %v", claim.Spec.VolumeName, err.Error())
+			}
+		}
+	}
+}
+
+func (p *Provisioner) retryUpdateVolume(claim *api_v1.PersistentVolumeClaim, class *storage_v1.StorageClass, updateMap map[string]interface{}) error {
+	util.LogDebug.Print("retryUpdateVolume called")
+	try := 0
+	for {
+		err := p.updateVolume(claim, class, updateMap)
+		if err != nil {
+			if try < maxCreates {
+				try++
+				util.LogDebug.Printf("try=%d", try)
+				time.Sleep(time.Duration(try) * time.Second)
+				continue
+			}
+			return err
+		}
+		return nil
+	}
+}
+
 // Start the provision workflow.  Note that Start will block until there are storage classes found.
 func (p *Provisioner) Start(stop chan struct{}) {
 	var err error
@@ -209,8 +273,11 @@ func (p *Provisioner) Start(stop chan struct{}) {
 	go classReflector.RunUntil(stop)
 
 	// Get and start the Persistent Volume Claim Controller
-	claimInformer := p.newClaimController()
+	var claimInformer cache.Controller
+	p.claimsStore, claimInformer = p.newClaimController()
 	go claimInformer.Run(stop)
+
+	go p.updateDockerVolumeMetadata(p.claimsStore)
 
 	volInformer := p.newVolumeController()
 	go volInformer.Run(stop)
@@ -259,6 +326,13 @@ func (p *Provisioner) deleteVolume(pv *api_v1.PersistentVolume, rmPV bool) {
 		}
 		vol := p.getDockerVolume(dockerClient, pv.Name)
 		if vol != nil && vol.Name == pv.Name {
+			_, ok := vol.Status["manager"]
+			if !ok {
+				util.LogDebug.Printf("unable to retrieve the manager information from volume status, setting it to %s", pv.Annotations[k8sProvisionedBy])
+				// set the manager
+				vol.Status["manager"] = pv.Annotations[k8sProvisionedBy]
+			}
+			util.LogDebug.Printf("vol.Status :%s, provisioner %s:", vol.Status["manager"], pv.Annotations[k8sProvisionedBy])
 			p.eventRecorder.Event(pv, api_v1.EventTypeNormal, "DeleteVolume", fmt.Sprintf("cleaning up volume named %s", pv.Name))
 			util.LogDebug.Printf("Docker volume with name %s found.  Delete using %s.", pv.Name, provisioner)
 			deleteChain.AppendRunner(&deleteDockerVol{
@@ -282,6 +356,29 @@ func (p *Provisioner) deleteVolume(pv *api_v1.PersistentVolume, rmPV bool) {
 			fmt.Sprintf("Failed to delete volume for pv %s: %v", pv.Name, err))
 	}
 
+}
+
+func (p *Provisioner) updateVolume(claim *api_v1.PersistentVolumeClaim, class *storage_v1.StorageClass, updateMap map[string]interface{}) error {
+	util.LogDebug.Printf("updateVolume called with %v", updateMap)
+
+	// get the volume name for update
+	volName := p.getBestVolName(claim, class)
+	var dockerClient *dockervol.DockerVolumePlugin
+	dockerClient, _, err := p.newDockerVolumePluginClient(class.Provisioner)
+	if err != nil {
+		return err
+	}
+	vol := p.getDockerVolume(dockerClient, volName)
+	if (vol == nil) || (vol != nil && volName != vol.Name) {
+		return fmt.Errorf("error updating pv from claim: %v and class :%v. err=Docker volume %v with name %s was not found ", claim, class, vol, volName)
+	}
+
+	util.LogDebug.Printf("invoking VolumeDriver.Update with name :%s updateMap :%v", vol.Name, updateMap)
+	_, err = dockerClient.Update(vol.Name, updateMap)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class *storage_v1.StorageClass) {
@@ -333,10 +430,20 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class
 		}
 
 		sizeForDockerVolumeinGib := getClaimSizeForFactor(claim, dockerClient, 0)
-		optionsMap := getDockerOptions(params, sizeForDockerVolumeinGib, dockerClient.ListOfStorageResourceOptions)
+
+		// handling storage class overrides
+		overrides := p.getClassOverrides(params)
+		optionsMap := p.getDockerOptions(params, pv, sizeForDockerVolumeinGib, dockerClient.ListOfStorageResourceOptions)
+
+		// get updated options map for docker after handling overrides
+		optionsMap = p.getClaimOverrideOptions(claim, overrides, optionsMap)
+		util.LogDebug.Printf("updated optionsMap with overrides %#v", optionsMap)
 
 		// set default docker options if not already set
 		p.setDefaultDockerOptions(optionsMap, params, dockerOptions, dockerClient)
+		// set the manager name
+		util.LogDebug.Print("provisioner name to be passed to docker volume create manager opts ", pv.Annotations[k8sProvisionedBy])
+		optionsMap["manager"] = pv.Annotations[k8sProvisionedBy]
 
 		provisionChain.AppendRunner(&createDockerVol{
 			requestedName: pv.Name,

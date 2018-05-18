@@ -26,6 +26,7 @@ import (
 	storage_v1 "k8s.io/client-go/pkg/apis/storage/v1"
 	storage_v1beta1 "k8s.io/client-go/pkg/apis/storage/v1beta1"
 	"k8s.io/client-go/tools/cache"
+	"strings"
 )
 
 func (p *Provisioner) listAllClasses(options meta_v1.ListOptions) (runtime.Object, error) {
@@ -76,6 +77,22 @@ func (p *Provisioner) getClass(className string) (*storage_v1.StorageClass, erro
 		return nil, fmt.Errorf("unable to find a class named %s", className)
 	}
 	return getStorageClass(classObj)
+}
+
+func (p *Provisioner) getClassOverrides(optionsMap map[string]string) []string {
+	var overrides []string
+	if val, ok := optionsMap[allowOverrides]; ok {
+		util.LogDebug.Printf("allowOverrides %s", val)
+		for k, v := range strings.Split(val, ",") {
+			v = strings.Trim(v, "")
+			if len(v) > 0 && v != "" {
+				util.LogDebug.Printf("processing iter :%v value :%v", k, v)
+				overrides = append(overrides, v)
+			}
+		}
+	}
+	util.LogDebug.Printf("resulting overrides :%#v  dockerOpts :%#v", overrides, optionsMap)
+	return overrides
 }
 
 func getStorageClass(t interface{}) (*storage_v1.StorageClass, error) {
