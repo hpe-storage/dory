@@ -30,6 +30,8 @@ const (
 	ActivateURI = "/Plugin.Activate"
 	//CreateURI is /VolumeDriver.Create
 	CreateURI = "/VolumeDriver.Create"
+	//UpdateURI = "/VolumeDriver.Update"
+	UpdateURI = "/VolumeDriver.Update"
 	//ListURI is /VolumeDriver.List
 	ListURI = "/VolumeDriver.List"
 	//CapabilitiesURI is /VolumeDriver.Capabilities
@@ -239,8 +241,8 @@ func (dvp *DockerVolumePlugin) List() (*GetListResponse, error) {
 	return res, nil
 }
 
-//Create a docker volume returning the docker volume name
-func (dvp *DockerVolumePlugin) Create(name string, options map[string]interface{}) (string, error) {
+// createOrUpdate handler
+func (dvp *DockerVolumePlugin) createOrUpdate(name string, options map[string]interface{}, isUpdate bool) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("name is required")
 	}
@@ -251,24 +253,52 @@ func (dvp *DockerVolumePlugin) Create(name string, options map[string]interface{
 	}
 	var req = &Request{Name: name, Opts: options}
 	var res = &GetResponse{}
-
-	err := dvp.driverRun(&connectivity.Request{
-		Action:        "POST",
-		Path:          CreateURI,
-		Payload:       req,
-		Response:      res,
-		ResponseError: res})
+	var err error
+	if isUpdate {
+		err = dvp.driverRun(&connectivity.Request{
+			Action:        "PUT",
+			Path:          UpdateURI,
+			Payload:       req,
+			Response:      res,
+			ResponseError: res})
+	} else {
+		err = dvp.driverRun(&connectivity.Request{
+			Action:        "POST",
+			Path:          CreateURI,
+			Payload:       req,
+			Response:      res,
+			ResponseError: res})
+	}
 	if err != nil {
-		util.LogError.Printf("unable to create docker volume using %v & %v - %s response - %v\n", name, options, err.Error(), res)
+		util.LogError.Printf("unable to create/update docker volume using %v & %v - %s response - %v\n", name, options, err.Error(), res)
 		return "", err
 	}
-
 	if err = driverErrorCheck(res); err != nil {
+		return "", err
+	}
+	return res.Volume.Name, nil
+}
+
+// Update the docker volumes
+// nolint Create and Update have same signature. For maintaining backward compatibility we need these two definitions
+func (dvp *DockerVolumePlugin) Update(name string, options map[string]interface{}) (string, error) {
+	name, err := dvp.createOrUpdate(name, options, true)
+	if err != nil {
+		util.LogError.Printf("unable to update docker volume using %v & %v - %s\n", name, options, err.Error())
+		return "", err
+	}
+	return name, nil
+}
+
+//Create a docker volume returning the docker volume name
+// nolint Create and Update have same signature. For maintaining backward compatibility we need these two definitions
+func (dvp *DockerVolumePlugin) Create(name string, options map[string]interface{}) (string, error) {
+	name, err := dvp.createOrUpdate(name, options, false)
+	if err != nil {
 		util.LogError.Printf("unable to create docker volume using %v & %v - %s\n", name, options, err.Error())
 		return "", err
 	}
-
-	return res.Volume.Name, nil
+	return name, nil
 }
 
 //Mount attaches and mounts a nimble volume returning the path

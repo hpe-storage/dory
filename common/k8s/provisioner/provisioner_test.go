@@ -47,8 +47,10 @@ func getTestDockerOptions() map[string]testDockerOptions {
 }
 
 func TestDockerOptionInvalidClaim(t *testing.T) {
+	pv := new(api_v1.PersistentVolume)
 	invalidOption := getTestDockerOptions()["invalidClaim"]
-	outputOption := getDockerOptions(getStorageClassParams(), invalidOption.claimSize, invalidOption.listOfStorageResourceOptions)
+	p := getTestProvisioner()
+	outputOption := p.getDockerOptions(getStorageClassParams(), pv, invalidOption.claimSize, invalidOption.listOfStorageResourceOptions)
 	if outputOption["size"] != getStorageClassParams()["size"] {
 		t.Error("size should not be set for invalid claimsize")
 	}
@@ -56,15 +58,19 @@ func TestDockerOptionInvalidClaim(t *testing.T) {
 
 func TestDockerOptionValidClaim(t *testing.T) {
 	validOption := getTestDockerOptions()["validClaim"]
-	outputOption := getDockerOptions(getStorageClassParams(), validOption.claimSize, validOption.listOfStorageResourceOptions)
+	pv := new(api_v1.PersistentVolume)
+	p := getTestProvisioner()
+	outputOption := p.getDockerOptions(getStorageClassParams(), pv, validOption.claimSize, validOption.listOfStorageResourceOptions)
 	if outputOption["size"] == getStorageClassParams()["size"] {
 		t.Error("size should be set for for valid claimsize")
 	}
 
 }
 func TestInvalidStorageResources(t *testing.T) {
+	p := getTestProvisioner()
 	invalidOption := getTestDockerOptions()["invalidStorageResources"]
-	outputOption := getDockerOptions(getStorageClassParams(), invalidOption.claimSize, invalidOption.listOfStorageResourceOptions)
+	pv := new(api_v1.PersistentVolume)
+	outputOption := p.getDockerOptions(getStorageClassParams(), pv, invalidOption.claimSize, invalidOption.listOfStorageResourceOptions)
 	if outputOption["size"] == getStorageClassParams()["size"] {
 		t.Error("size should set for for invalid listOfStorageResourceOptions but valid claim size")
 	}
