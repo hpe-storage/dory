@@ -18,6 +18,7 @@ package linux
 
 import (
 	"github.com/hpe-storage/dory/common/util"
+	"github.com/hpe-storage/dory/common/docker/dockervol"
 	"strings"
 )
 
@@ -49,6 +50,12 @@ func BindMount(path, mountPoint string, rbind bool) error {
 	out, rc, err := util.ExecCommandOutput(mountCommand, args)
 	if err != nil {
 		util.LogError.Printf("BindMount failed with %d.  It was called with %s %s %v.  Output=%v.", rc, path, mountPoint, rbind, out)
+
+		pluginID, _ := dockervol.GetV2PluginID("hpe:latest", "")
+		pathForManagedPlugin := "/var/lib/docker/plugins/" + pluginID + "/rootfs"+ path
+
+		args := []string{flag, pathForManagedPlugin, mountPoint}
+		_, _, err := util.ExecCommandOutput(mountCommand, args)
 		return err
 	}
 

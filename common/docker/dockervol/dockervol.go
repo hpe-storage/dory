@@ -413,3 +413,25 @@ func getV2PluginSocket(name, dockerSocket string) (string, error) {
 
 	return "", fmt.Errorf("unable to find V2 plugin named %s", name)
 }
+// GetV2PluginID - name is the name of the plugin and this function returns the 
+// plugin ID of the managed plugin
+func GetV2PluginID(name, dockerSocket string) (string, error) {
+	c := dockerlt.NewDockerClient(dockerSocket)
+	plugins, err := c.PluginsGet()
+
+	if err != nil {
+		return "", fmt.Errorf("failed to get V2 plugins from docker. error=%s", err.Error())
+	}
+
+	for _, plugin := range plugins {
+		if strings.Compare(name, plugin.Name) == 0 || strings.Compare(fmt.Sprintf("%s:latest", name), plugin.Name) == 0 {
+			if !plugin.Enabled {
+				return fmt.Sprintf("/run/docker/plugins/%s/%s", plugin.ID, plugin.Config.Interface.Socket), fmt.Errorf("found Docker V2 Plugin named %s, but it is disabled", name)
+			}
+
+			return plugin.ID, nil
+		}
+	}
+
+	return "", fmt.Errorf("unable to find V2 plugin ID %s", name)
+}
