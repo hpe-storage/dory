@@ -228,7 +228,17 @@ func Mount(args []string) (string, error) {
 	//Bind mount the docker path to the flexvol path
 	err = linux.BindMount(path, args[0], false)
 	if err != nil {
-		return "", err
+		pluginID, _ := dockervol.GetV2PluginID("hpe:latest", "")
+		pathForManagedPlugin := "/var/lib/docker/plugins/" + pluginID + "/rootfs"+ path
+
+		//args := []string{flag, pathForManagedPlugin, mountPoint}
+		//_, _, err := util.ExecCommandOutput(mountCommand, args)
+		err = linux.BindMount(pathForManagedPlugin, args[0], false)
+
+		if err != nil {
+			return "", err
+		}
+		path = pathForManagedPlugin
 	}
 
 	// Set selinux context if configured
