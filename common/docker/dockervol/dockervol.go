@@ -330,11 +330,17 @@ func (dvp *DockerVolumePlugin) Unmount(name, mountID string) error {
 }
 
 //Delete calls the delete function of the plugin
-func (dvp *DockerVolumePlugin) Delete(name string) error {
+func (dvp *DockerVolumePlugin) Delete(name string, managerName string) error {
 	if name == "" {
 		return fmt.Errorf("name is required")
 	}
-	var req = &Request{Name: name}
+	var req *Request
+	if managerName != "" {
+		req = &Request{Name: name, Opts: map[string]interface{}{"manager": managerName}}
+	} else {
+		req = &Request{Name: name}
+	}
+
 	var res = &GetResponse{}
 
 	err := dvp.driverRun(&connectivity.Request{
