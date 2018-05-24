@@ -48,7 +48,6 @@ const (
 	NotFound = "Unable to find"
 
 	defaultSocketPath = "/run/docker/plugins/nimble.sock"
-        //managedPluginID = ""
 	maxTries          = 3
 )
 
