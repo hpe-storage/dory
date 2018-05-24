@@ -61,6 +61,7 @@ type Options struct {
 	ListOfStorageResourceOptions []string
 	FactorForConversion          int
 	SupportsCapabilities         bool
+        ManagedPluginID            string
 }
 
 //DockerVolumePlugin is the client to a specific docker volume plugin
@@ -143,7 +144,7 @@ func NewDockerVolumePlugin(options *Options) (*DockerVolumePlugin, error) {
 	var err error
 	if !strings.HasPrefix(options.SocketPath, "/") {
 		// this is a v2 plugin, so we need to find its socket file
-		options.SocketPath, err = getV2PluginSocket(options.SocketPath, "")
+		options.SocketPath, options.ManagedPluginID, err = getV2PluginSocket(options.SocketPath, "")
 	}
 	if err != nil {
 		return nil, err
@@ -394,22 +395,22 @@ func driverErrorCheck(e Errorer) error {
 }
 
 // name is the name of the docker volume plugin.  dockerSocket is the full path to the docker socket.  The default is used if an empty string is passed.
-func getV2PluginSocket(name, dockerSocket string) (string, error) {
+func getV2PluginSocket(name, dockerSocket string) (string, string, error) {
 	c := dockerlt.NewDockerClient(dockerSocket)
 	plugins, err := c.PluginsGet()
 
 	if err != nil {
-		return "", fmt.Errorf("failed to get V2 plugins from docker. error=%s", err.Error())
+		return "", "", fmt.Errorf("failed to get V2 plugins from docker. error=%s", err.Error())
 	}
 
 	for _, plugin := range plugins {
 		if strings.Compare(name, plugin.Name) == 0 || strings.Compare(fmt.Sprintf("%s:latest", name), plugin.Name) == 0 {
 			if !plugin.Enabled {
-				return fmt.Sprintf("/run/docker/plugins/%s/%s", plugin.ID, plugin.Config.Interface.Socket), fmt.Errorf("found Docker V2 Plugin named %s, but it is disabled", name)
+				return fmt.Sprintf("/run/docker/plugins/%s/%s", plugin.ID, plugin.Config.Interface.Socket), "", fmt.Errorf("found Docker V2 Plugin named %s, but it is disabled", name)
 			}
-			return fmt.Sprintf("/run/docker/plugins/%s/%s", plugin.ID, plugin.Config.Interface.Socket), nil
+			return fmt.Sprintf("/run/docker/plugins/%s/%s", plugin.ID, plugin.Config.Interface.Socket), plugin.ID, nil
 		}
 	}
 
-	return "", fmt.Errorf("unable to find V2 plugin named %s", name)
+	return "", "", fmt.Errorf("unable to find V2 plugin named %s", name)
 }

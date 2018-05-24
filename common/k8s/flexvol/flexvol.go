@@ -60,6 +60,7 @@ const (
 var (
 	//createVolumes indicate whether the driver should create missing volumes
 	createVolumes = true
+        pluginID = ""
 
 	dvp *dockervol.DockerVolumePlugin
 )
@@ -99,6 +100,7 @@ func (ar *AttachRequest) getBestName() string {
 func Config(options *dockervol.Options) (err error) {
 	dvp, err = dockervol.NewDockerVolumePlugin(options)
 	createVolumes = options.CreateVolumes
+        pluginID = options.ManagedPluginID
 	return err
 }
 
@@ -228,7 +230,14 @@ func Mount(args []string) (string, error) {
 	//Bind mount the docker path to the flexvol path
 	err = linux.BindMount(path, args[0], false)
 	if err != nil {
-		return "", err
+		pathForManagedPlugin := "/var/lib/docker/plugins/" + pluginID + "/rootfs"+ path
+		util.LogDebug.Printf("pathForManagedPlugin: %s", pathForManagedPlugin)	
+		err = linux.BindMount(pathForManagedPlugin, args[0], false)
+
+		if err != nil {
+			return "", err
+		}
+		path = pathForManagedPlugin
 	}
 
 	// Set selinux context if configured
