@@ -87,6 +87,7 @@ func main() {
 		ListOfStorageResourceOptions: listOfStorageResourceOptions,
 		FactorForConversion:          factorForConversion,
 		SupportsCapabilities:         supportsCapabilities,
+                ManagedPluginID:              "",
 	}
 	err := flexvol.Config(dockervolOptions)
 	var mess string

@@ -49,7 +49,6 @@ func BindMount(path, mountPoint string, rbind bool) error {
 	out, rc, err := util.ExecCommandOutput(mountCommand, args)
 	if err != nil {
 		util.LogError.Printf("BindMount failed with %d.  It was called with %s %s %v.  Output=%v.", rc, path, mountPoint, rbind, out)
-
 		return err
 	}
 
