@@ -128,6 +128,6 @@ doryd: lint; $(info $(A1) dory)
 .PHONY: doryd_docker
 doryd_docker: doryd; $(info $(A1) doryd_docker)
 	@echo "$(A2) rm current doryd image"
-	-docker image rm kube-storage-controller:edge
+	-docker image rm kube-storage-controller-dory:edge
 	@echo "$(A2) build doryd image"
-	docker build -t kube-storage-controller:edge -f ./build/docker/doryd/Dockerfile .
+	docker build -t kube-storage-controller-dory:edge -f ./build/docker/doryd/Dockerfile .
