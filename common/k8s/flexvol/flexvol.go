@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"time"
+        "strings"
 )
 
 const (
@@ -338,7 +339,8 @@ func getVolumeNameFromMountPath(k8sPath, dockerPath string) (string, error) {
 			return "", err
 		}
 		for _, vol := range volumes.Volumes {
-			if vol.Mountpoint == dockerPath {
+			if (vol.Mountpoint == dockerPath || (strings.Contains(dockerPath, vol.Mountpoint) && strings.HasPrefix(dockerPath,"/var/lib/docker"))) {
+                                util.LogDebug.Printf("dockerPath %s, volume mountpoint %s", dockerPath, vol.Mountpoint)
 				return vol.Name, nil
 			}
 		}
