@@ -339,8 +339,10 @@ func getVolumeNameFromMountPath(k8sPath, dockerPath string) (string, error) {
 			return "", err
 		}
 		for _, vol := range volumes.Volumes {
-			if (vol.Mountpoint == dockerPath || (strings.Contains(dockerPath, vol.Mountpoint) && strings.HasPrefix(dockerPath,"/var/lib/docker"))) {
-                                util.LogDebug.Printf("dockerPath %s, volume mountpoint %s", dockerPath, vol.Mountpoint)
+
+                        util.LogDebug.Printf("dockerPath %s, volume mountpoint %s", dockerPath, vol.Mountpoint)
+			if (vol.Mountpoint == dockerPath || (findStringAfterLastSlash(vol.Mountpoint) == findStringAfterLastSlash(dockerPath))){
+                                util.LogDebug.Printf(" returning docker volume name %s", vol.Name)
 				return vol.Name, nil
 			}
 		}
@@ -359,4 +361,14 @@ func findJSON(args []string, req *AttachRequest) (string, error) {
 		}
 	}
 	return "", err
+}
+func findStringAfterLastSlash(s string) string {
+
+	//s := "/var/lib/docker/plugins/a238188db964f8139af8d502a9b134b1f9522ccc27936ae5512b2f1b662f0aa5/rootfs/opt/hpe/data/hpedocker-dm-uuid-mpath-360002ac0000000000101331f00019d52"
+
+	flds := strings.Split(s, "/")
+	arrayLength := len(flds)
+	fmt.Printf(" Length = %d, last substring %s" ,arrayLength, flds[arrayLength -1])
+	return flds[arrayLength - 1]
+
 }
