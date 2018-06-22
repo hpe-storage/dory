@@ -129,12 +129,11 @@ func (p *Provisioner) handleCloneOfPVC(nameSpace, claimName string) (string, err
 	return claim.Spec.VolumeName, nil
 }
 
-func (p *Provisioner) getDockerOptions(params map[string]string, class *storage_v1.StorageClass, claimSizeinGiB int, listOfOptions []string) (map[string]interface{}, error) {
+func (p *Provisioner) getDockerOptions(params map[string]string, class *storage_v1.StorageClass, claimSizeinGiB int, listOfOptions []string, nameSpace string) (map[string]interface{}, error) {
 	dockOpts := make(map[string]interface{}, len(params))
 	foundSizeKey := false
 	for key, value := range params {
 		if key == cloneOfPVC {
-			nameSpace := p.getClassNameSpace(class)
 			pvName, err := p.handleCloneOfPVC(nameSpace, value)
 			if err != nil {
 				util.LogError.Printf("Error to retrieve pvc %s/%s : %s return existing options", nameSpace, value, err.Error())

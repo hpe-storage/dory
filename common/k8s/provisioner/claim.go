@@ -168,3 +168,12 @@ func (p *Provisioner) getClaimOverrideOptions(claim *api_v1.PersistentVolumeClai
 	}
 	return optionsMap
 }
+
+func (p *Provisioner) getClaimNameSpace(claim *api_v1.PersistentVolumeClaim) string {
+	nameSpace := "default"
+	if claim != nil && claim.Namespace != "" {
+		nameSpace = claim.Namespace
+	}
+	util.LogDebug.Printf("namespace of the claim %s is : %s", claim.Name, nameSpace)
+	return nameSpace
+}

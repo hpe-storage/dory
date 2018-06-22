@@ -88,7 +88,7 @@ func main() {
 		FactorForConversion:          factorForConversion,
 		SupportsCapabilities:         supportsCapabilities,
 	}
-	err := flexvol.Config(dockervolOptions)
+	err := flexvol.Config(os.Args[0], dockervolOptions)
 	var mess string
 	if err != nil {
 		mess = flexvol.BuildJSONResponse(&flexvol.Response{

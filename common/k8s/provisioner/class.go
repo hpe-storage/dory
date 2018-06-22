@@ -95,15 +95,6 @@ func (p *Provisioner) getClassOverrides(optionsMap map[string]string) []string {
 	return overrides
 }
 
-func (p *Provisioner) getClassNameSpace(class *storage_v1.StorageClass) string {
-	nameSpace := "default"
-	if class != nil && class.Namespace != "" {
-		nameSpace = class.Namespace
-	}
-	util.LogDebug.Printf("namespace of the class %s is : %s", class.Name, nameSpace)
-	return nameSpace
-}
-
 func getStorageClass(t interface{}) (*storage_v1.StorageClass, error) {
 	switch t := t.(type) {
 	default:
