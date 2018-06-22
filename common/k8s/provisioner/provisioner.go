@@ -43,12 +43,11 @@ import (
 )
 
 const (
-	dockerVolumeName      = "docker-volume-name"
-	flexVolumeBasePath    = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
-	k8sProvisionedBy      = "pv.kubernetes.io/provisioned-by"
-	k8sProvisionedByClaim = "volume.beta.kubernetes.io/storage-provisioner"
-	chainTimeout          = 2 * time.Minute
-	chainRetries          = 2
+	dockerVolumeName   = "docker-volume-name"
+	flexVolumeBasePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
+	k8sProvisionedBy   = "pv.kubernetes.io/provisioned-by"
+	chainTimeout       = 2 * time.Minute
+	chainRetries       = 2
 	//TODO allow this to be set per docker volume driver
 	maxCreates = 4
 	//TODO allow this to be set per docker volume driver
@@ -59,6 +58,8 @@ const (
 	maxWaitForClaims           = 60
 	allowOverrides             = "allowOverrides"
 	cloneOfPVC                 = "cloneOfPVC"
+	manager                    = "manager"
+	managerName                = "k8s"
 )
 
 var (
@@ -69,7 +70,7 @@ var (
 	// statusLoggingWait is only used when debug is true
 	statusLoggingWait                   = 5 * time.Second
 	defaultListOfStorageResourceOptions = []string{"size", "sizeInGiB"}
-	defaultDockerOptions                = map[string]interface{}{"mountConflictDelay": 30}
+	defaultDockerOptions                = map[string]interface{}{"mountConflictDelay": 30, manager: managerName}
 )
 
 // Provisioner provides dynamic pvs based on pvcs and storage classes.
@@ -202,10 +203,8 @@ func NewProvisioner(clientSet *kubernetes.Clientset, provisionerName string, aff
 
 // update the existing volume's metadata for the claims
 func (p *Provisioner) updateDockerVolumeMetadata(store cache.Store) {
-	util.LogDebug.Print("updateDockerVolumeMetadata called")
-	optionsMap := make(map[string]interface{})
-	optionsMap["manager"] = p.namePrefix
-	util.LogDebug.Printf("update optionsMap #%v", optionsMap)
+	util.LogDebug.Print("updateDockerVolumeMetadata started")
+	optionsMap := map[string]interface{}{manager: managerName}
 
 	i := 0
 	for len(store.List()) < 1 {
@@ -216,47 +215,42 @@ func (p *Provisioner) updateDockerVolumeMetadata(store cache.Store) {
 		time.Sleep(time.Second)
 		i++
 	}
+
 	for _, pvc := range store.List() {
 		claim, err := getPersistentVolumeClaim(pvc)
 		if err != nil {
-			util.LogDebug.Printf("unable to retrieve the claim for %v", pvc)
+			util.LogDebug.Printf("unable to retrieve the claim from %v", pvc)
 			continue
 		}
-		util.LogDebug.Printf("handling claim %v", claim)
-		className := getClaimClassName(claim)
-		// update the metadata for only the provisioner matched claims
-		if strings.HasPrefix(claim.Annotations[k8sProvisionedByClaim], optionsMap["manager"].(string)) {
-			class, err := p.getClass(className)
-			if err != nil {
-				util.LogDebug.Printf("unable to retrieve the class object for claim %v", claim.Name)
-				continue
-			}
-			util.LogDebug.Printf("handling update for claim %v class %v", claim.Name, className)
-			err = p.retryUpdateVolume(claim, class, optionsMap)
-			if err != nil {
-				// ignore update for this volume after retries and continue with other volumes
-				util.LogDebug.Printf("unable to update volume %v Err: %v", claim.Spec.VolumeName, err.Error())
-			}
-		}
-	}
-}
 
-func (p *Provisioner) retryUpdateVolume(claim *api_v1.PersistentVolumeClaim, class *storage_v1.StorageClass, updateMap map[string]interface{}) error {
-	util.LogDebug.Print("retryUpdateVolume called")
-	try := 0
-	for {
-		err := p.updateVolume(claim, class, updateMap)
-		if err != nil {
-			if try < maxCreates {
-				try++
-				util.LogDebug.Printf("try=%d", try)
-				time.Sleep(time.Duration(try) * time.Second)
-				continue
-			}
-			return err
+		if claim.Status.Phase != api_v1.ClaimBound {
+			util.LogDebug.Printf("claim %s was not bound - skipping", claim.Name)
+			continue
 		}
-		return nil
+
+		className := getClaimClassName(claim)
+		util.LogDebug.Printf("found classname %s for claim %s.", className, claim.Name)
+		class, err := p.getClass(className)
+		if err != nil {
+			util.LogError.Printf("unable to retrieve the class object for claim %v", claim)
+			continue
+		}
+
+		if !strings.HasPrefix(class.Provisioner, p.namePrefix) {
+			util.LogInfo.Printf("updateDockerVolumeMetadata: class named %s in pvc %s did not refer to a supported provisioner (name must begin with %s).  current provisioner=%s - skipping", className, claim.Name, p.namePrefix, class.Provisioner)
+			continue
+		}
+
+		err = p.updateVolume(claim, class.Provisioner, optionsMap)
+		if err != nil {
+			// we don't want to beat on the docker plugin if it doesn't support update
+			// so we simply move on to the next volume if we hit an error
+			util.LogError.Printf("unable to update volume %v Err: %v", claim.Spec.VolumeName, err.Error())
+			continue
+		}
 	}
+
+	util.LogDebug.Print("updateDockerVolumeMetadata ended")
 }
 
 // Start the provision workflow.  Note that Start will block until there are storage classes found.
@@ -327,13 +321,6 @@ func (p *Provisioner) deleteVolume(pv *api_v1.PersistentVolume, rmPV bool) {
 		}
 		vol := p.getDockerVolume(dockerClient, pv.Name)
 		if vol != nil && vol.Name == pv.Name {
-			_, ok := vol.Status["manager"]
-			if !ok {
-				util.LogDebug.Printf("unable to retrieve the manager information from volume status, setting it to %s", pv.Annotations[k8sProvisionedBy])
-				// set the manager
-				vol.Status["manager"] = pv.Annotations[k8sProvisionedBy]
-			}
-			util.LogDebug.Printf("vol.Status :%s, provisioner %s:", vol.Status["manager"], pv.Annotations[k8sProvisionedBy])
 			p.eventRecorder.Event(pv, api_v1.EventTypeNormal, "DeleteVolume", fmt.Sprintf("cleaning up volume named %s", pv.Name))
 			util.LogDebug.Printf("Docker volume with name %s found.  Delete using %s.", pv.Name, provisioner)
 			deleteChain.AppendRunner(&deleteDockerVol{
@@ -359,19 +346,26 @@ func (p *Provisioner) deleteVolume(pv *api_v1.PersistentVolume, rmPV bool) {
 
 }
 
-func (p *Provisioner) updateVolume(claim *api_v1.PersistentVolumeClaim, class *storage_v1.StorageClass, updateMap map[string]interface{}) error {
-	util.LogDebug.Printf("updateVolume called with %v", updateMap)
+func (p *Provisioner) updateVolume(claim *api_v1.PersistentVolumeClaim, provisioner string, updateMap map[string]interface{}) error {
+	util.LogDebug.Printf("updateVolume called with claim:%s, provisioner:%s and options:%v", claim.Name, provisioner, updateMap)
 
 	// get the volume name for update
-	volName := p.getBestVolName(claim, class)
+	volName := claim.Spec.VolumeName
+
 	var dockerClient *dockervol.DockerVolumePlugin
-	dockerClient, _, err := p.newDockerVolumePluginClient(class.Provisioner)
+	dockerClient, _, err := p.newDockerVolumePluginClient(provisioner)
 	if err != nil {
 		return err
 	}
+
 	vol := p.getDockerVolume(dockerClient, volName)
 	if (vol == nil) || (vol != nil && volName != vol.Name) {
-		return fmt.Errorf("error updating pv from claim: %v and class :%v. err=Docker volume %v with name %s was not found ", claim, class, vol, volName)
+		return fmt.Errorf("error updating pv from claim: %v and provisioner :%s. err=Docker volume %v with name %s was not found ", claim, provisioner, vol, volName)
+	}
+
+	if val, ok := vol.Status[manager]; ok && val != "" {
+		util.LogDebug.Printf("claim:%s has manager set to value %v - skipping", claim.Name, val)
+		return nil
 	}
 
 	util.LogDebug.Printf("invoking VolumeDriver.Update with name :%s updateMap :%v", vol.Name, updateMap)
@@ -639,9 +633,12 @@ func (c *createDockerVol) Run() (name interface{}, err error) {
 
 func (c *createDockerVol) Rollback() (err error) {
 	if c.returnedName != "" {
-		return c.client.Delete(c.returnedName)
+		err = c.client.Delete(c.returnedName, managerName)
+		if err != nil {
+			err = c.client.Delete(c.returnedName, "")
+		}
 	}
-	return nil
+	return err
 }
 
 type deleteDockerVol struct {
@@ -654,7 +651,11 @@ func (c deleteDockerVol) Name() string {
 }
 
 func (c *deleteDockerVol) Run() (name interface{}, err error) {
-	return nil, c.client.Delete(c.name)
+	err = c.client.Delete(c.name, managerName)
+	if err != nil {
+		err = c.client.Delete(c.name, "")
+	}
+	return nil, err
 }
 
 func (c *deleteDockerVol) Rollback() (err error) {
