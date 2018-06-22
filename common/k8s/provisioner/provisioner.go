@@ -53,6 +53,7 @@ const (
 	maxCreates = 4
 	//TODO allow this to be set per docker volume driver
 	maxDeletes                 = 4
+	defaultSocketFile          = "/run/docker/plugins/nimble.sock"
 	defaultfactorForConversion = 1073741824
 	defaultStripValue          = true
 	maxWaitForClaims           = 60
@@ -413,38 +414,38 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class
 	atomic.AddUint32(&p.provisionCommandChains, 1)
 	defer atomic.AddUint32(&p.provisionCommandChains, ^uint32(0))
 
+	var dockerClient *dockervol.DockerVolumePlugin
+	var dockerOptions map[string]interface{}
+	dockerClient, dockerOptions, err = p.newDockerVolumePluginClient(class.Provisioner)
+	if err != nil {
+		util.LogError.Printf("unable to get docker client for class %v while trying to provision pvc named %s (%s): %s", class, claim.Name, id, err)
+		p.eventRecorder.Event(class, api_v1.EventTypeWarning, "ProvisionVolumeGetClient",
+			fmt.Sprintf("failed to get docker volume client for class %s while trying to provision claim %s (%s): %s", class.Name, claim.Name, id, err))
+		return
+	}
+	vol := p.getDockerVolume(dockerClient, volName)
+	if vol != nil && volName == vol.Name {
+		util.LogError.Printf("error provisioning pv from %v and %v. err=Docker volume with this name was found %v.", claim, class, vol)
+		return
+	}
+
+	sizeForDockerVolumeinGib := getClaimSizeForFactor(claim, dockerClient, 0)
+
+	// handling storage class overrides
+	overrides := p.getClassOverrides(params)
+	optionsMap, err := p.getDockerOptions(params, class, sizeForDockerVolumeinGib, dockerClient.ListOfStorageResourceOptions)
+	if err != nil {
+		util.LogError.Printf("error getting Docker option from %v %v and %v. err=%v", claim, params, class, err)
+		return
+	}
+
+	// get updated options map for docker after handling overrides
+	optionsMap = p.getClaimOverrideOptions(claim, overrides, optionsMap)
+	util.LogDebug.Printf("updated optionsMap with overrides %#v", optionsMap)
+
+	// set default docker options if not already set
+	p.setDefaultDockerOptions(optionsMap, params, dockerOptions, dockerClient)
 	if p.affectDockerVols {
-		var dockerClient *dockervol.DockerVolumePlugin
-		var dockerOptions map[string]interface{}
-		dockerClient, dockerOptions, err = p.newDockerVolumePluginClient(class.Provisioner)
-		if err != nil {
-			util.LogError.Printf("unable to get docker client for class %v while trying to provision pvc named %s (%s): %s", class, claim.Name, id, err)
-			p.eventRecorder.Event(class, api_v1.EventTypeWarning, "ProvisionVolumeGetClient",
-				fmt.Sprintf("failed to get docker volume client for class %s while trying to provision claim %s (%s): %s", class.Name, claim.Name, id, err))
-			return
-		}
-		vol := p.getDockerVolume(dockerClient, volName)
-		if vol != nil && volName == vol.Name {
-			util.LogError.Printf("error provisioning pv from %v and %v. err=Docker volume with this name was found %v.", claim, class, vol)
-			return
-		}
-
-		sizeForDockerVolumeinGib := getClaimSizeForFactor(claim, dockerClient, 0)
-
-		// handling storage class overrides
-		overrides := p.getClassOverrides(params)
-		optionsMap := p.getDockerOptions(params, pv, sizeForDockerVolumeinGib, dockerClient.ListOfStorageResourceOptions)
-
-		// get updated options map for docker after handling overrides
-		optionsMap = p.getClaimOverrideOptions(claim, overrides, optionsMap)
-		util.LogDebug.Printf("updated optionsMap with overrides %#v", optionsMap)
-
-		// set default docker options if not already set
-		p.setDefaultDockerOptions(optionsMap, params, dockerOptions, dockerClient)
-		// set the manager name
-		util.LogDebug.Print("provisioner name to be passed to docker volume create manager opts ", pv.Annotations[k8sProvisionedBy])
-		optionsMap["manager"] = pv.Annotations[k8sProvisionedBy]
-
 		provisionChain.AppendRunner(&createDockerVol{
 			requestedName: pv.Name,
 			options:       optionsMap,
@@ -472,9 +473,9 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class
 	}
 
 	// if we created a volume, remove its uuid from the message map
-	vol, _ := getPersistentVolume(provisionChain.GetRunnerOutput("createPersistentVolume"))
-	if vol != nil {
-		p.removeMessageChan(fmt.Sprintf("%s", claim.UID), fmt.Sprintf("%s", vol.UID))
+	pvol, _ := getPersistentVolume(provisionChain.GetRunnerOutput("createPersistentVolume"))
+	if pvol != nil {
+		p.removeMessageChan(fmt.Sprintf("%s", claim.UID), fmt.Sprintf("%s", pvol.UID))
 	}
 
 }
@@ -531,7 +532,7 @@ func (p *Provisioner) newDockerVolumePluginClient(provisionerName string) (*dock
 	configPathName := fmt.Sprintf("%s%s/%s.json", flexVolumeBasePath, strings.Replace(provisionerName, "/", "~", 1), driverName[1])
 	util.LogDebug.Printf("looking for %s", configPathName)
 	var (
-		socketFile                   string
+		socketFile                   = defaultSocketFile
 		strip                        = defaultStripValue
 		listOfStorageResourceOptions = defaultListOfStorageResourceOptions
 		factorForConversion          = defaultfactorForConversion
@@ -541,13 +542,16 @@ func (p *Provisioner) newDockerVolumePluginClient(provisionerName string) (*dock
 	if err != nil {
 		util.LogInfo.Printf("Unable to process config at %s, %v.  Using defaults.", configPathName, err)
 	} else {
-		socketFile = c.GetString("dockerVolumePluginSocketPath")
+		socketFile, err = c.GetStringWithError("dockerVolumePluginSocketPath")
+		if err != nil {
+			socketFile = defaultSocketFile
+		}
 		b, err := c.GetBool("stripK8sFromOptions")
 		if err == nil {
 			strip = b
 		}
-		ss := c.GetStringSlice("listOfStorageResourceOptions")
-		if ss != nil {
+		ss, err := c.GetStringSliceWithError("listOfStorageResourceOptions")
+		if err != nil {
 			listOfStorageResourceOptions = ss
 		}
 		i := c.GetInt64("factorForConversion")
