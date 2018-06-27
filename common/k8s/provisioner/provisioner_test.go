@@ -1,6 +1,7 @@
 package provisioner
 
 import (
+	"fmt"
 	"github.com/hpe-storage/dory/common/docker/dockervol"
 	resource_v1 "k8s.io/apimachinery/pkg/api/resource"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,35 +47,28 @@ func getTestDockerOptions() map[string]testDockerOptions {
 
 }
 
-func TestDockerOptionInvalidClaim(t *testing.T) {
-	pv := new(api_v1.PersistentVolume)
-	invalidOption := getTestDockerOptions()["invalidClaim"]
+func TestDockerOptions(t *testing.T) {
 	p := getTestProvisioner()
-	outputOption := p.getDockerOptions(getStorageClassParams(), pv, invalidOption.claimSize, invalidOption.listOfStorageResourceOptions)
+	invalidOption := getTestDockerOptions()["invalidClaim"]
+	outputOption, _ := p.getDockerOptions(getStorageClassParams(), getTestStorageClass(), invalidOption.claimSize, invalidOption.listOfStorageResourceOptions, "default")
 	if outputOption["size"] != getStorageClassParams()["size"] {
 		t.Error("size should not be set for invalid claimsize")
 	}
-}
 
-func TestDockerOptionValidClaim(t *testing.T) {
+	invalidOption = getTestDockerOptions()["invalidStorageResources"]
+	outputOption, _ = p.getDockerOptions(getStorageClassParams(), getTestStorageClass(), invalidOption.claimSize, invalidOption.listOfStorageResourceOptions, "default")
+	if outputOption["size"] == getStorageClassParams()["size"] {
+		t.Error("size should set for for invalid listOfStorageResourceOptions but valid claim size")
+	}
+
 	validOption := getTestDockerOptions()["validClaim"]
-	pv := new(api_v1.PersistentVolume)
-	p := getTestProvisioner()
-	outputOption := p.getDockerOptions(getStorageClassParams(), pv, validOption.claimSize, validOption.listOfStorageResourceOptions)
+	outputOption, _ = p.getDockerOptions(getStorageClassParams(), getTestStorageClass(), validOption.claimSize, validOption.listOfStorageResourceOptions, "default")
 	if outputOption["size"] == getStorageClassParams()["size"] {
 		t.Error("size should be set for for valid claimsize")
 	}
 
 }
-func TestInvalidStorageResources(t *testing.T) {
-	p := getTestProvisioner()
-	invalidOption := getTestDockerOptions()["invalidStorageResources"]
-	pv := new(api_v1.PersistentVolume)
-	outputOption := p.getDockerOptions(getStorageClassParams(), pv, invalidOption.claimSize, invalidOption.listOfStorageResourceOptions)
-	if outputOption["size"] == getStorageClassParams()["size"] {
-		t.Error("size should set for for invalid listOfStorageResourceOptions but valid claim size")
-	}
-}
+
 func getTestPVC() *api_v1.PersistentVolumeClaim {
 	testClaim := new(api_v1.PersistentVolumeClaim)
 	testClaim.Annotations = make(map[string]string)
@@ -196,4 +190,19 @@ func TestEmptyVolumeCreate(t *testing.T) {
 	if err == nil {
 		t.Error("expected error on empty volume name")
 	}
+}
+
+func TestOverrides(t *testing.T) {
+
+	p := getTestProvisioner()
+	params := getStorageClassParams()
+	params["allowOverrides"] = "description"
+	overrides := p.getClassOverrides(params)
+
+	if overrides[0] != "description" {
+		t.Error("expected overrides to have only description")
+	}
+
+	fmt.Print(overrides)
+
 }

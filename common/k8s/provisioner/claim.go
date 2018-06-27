@@ -25,7 +25,6 @@ import (
 	api_v1 "k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/tools/cache"
 	"strings"
-	"time"
 )
 
 func (p *Provisioner) listAllClaims(options meta_v1.ListOptions) (runtime.Object, error) {
@@ -125,36 +124,29 @@ func getPersistentVolumeClaim(t interface{}) (*api_v1.PersistentVolumeClaim, err
 	}
 }
 
-func (p *Provisioner) getClaimFromPVCName(pv *api_v1.PersistentVolume, claimName string) (*api_v1.PersistentVolumeClaim, error) {
-	util.LogDebug.Printf("getClaimFromName called with %s", claimName)
-	i := 0
-	for len(p.claimsStore.List()) < 1 {
-		if i > maxWaitForClaims {
-			p.eventRecorder.Event(pv, api_v1.EventTypeWarning, "ProvisionStorage",
-				fmt.Sprintf("clone of a pvc(%s) for namespace(%s) was requested but we couldn't find it", claimName, pv.Namespace))
-			util.LogInfo.Printf("No Claims found after waiting for %d seconds", maxWaitForClaims)
-			return nil, fmt.Errorf("No Claims found after waiting for %d seconds", maxWaitForClaims)
-		}
-		time.Sleep(time.Second)
-		i++
+func (p *Provisioner) getClaimFromPVCName(nameSpace, claimName string) (*api_v1.PersistentVolumeClaim, error) {
+	util.LogDebug.Printf("getClaimFromPVCNames called with %s/%s", nameSpace, claimName)
+	if len(p.claimsStore.List()) < 1 {
+		return nil, fmt.Errorf("requested pvc %s/%s was not found", nameSpace, claimName)
 	}
-	for _, pvc := range p.claimsStore.List() {
-		claim, err := getPersistentVolumeClaim(pvc)
-		if err != nil {
-			return nil, err
-		}
-		util.LogDebug.Printf("handling claim(%v) with namespace(%s) and status(%s)", claim.Name, claim.Namespace, claim.Status.Phase)
-		if claim.Name == claimName && claim.Namespace == pv.Namespace && claim.Status.Phase == api_v1.ClaimBound {
-			util.LogDebug.Printf("claim(%s) matched claimName(%s) for namespace(%s)", claim.Name, claimName, claim.Namespace)
-			return claim, nil
-		}
+	claimInterface, found, err := p.claimsStore.GetByKey(nameSpace + "/" + claimName)
+	if err != nil {
+		util.LogError.Printf("Error to retrieve pvc %s/%s : %s", nameSpace, claimName, err.Error())
+		return nil, fmt.Errorf("Error to retrieve pvc %s/%s : %s", nameSpace, claimName, err.Error())
 	}
-	// if reached here it means no claim found
-	util.LogError.Printf("clone of a pvc(%s) for namespace(%s) was requested but we couldn't find it", claimName, pv.Namespace)
-	p.eventRecorder.Event(pv, api_v1.EventTypeWarning, "ProvisionStorage",
-		fmt.Sprintf("clone of a pvc(%s) for namespace(%s) was requested but we couldn't find it", claimName, pv.Namespace))
-	return nil, nil
+	if !found {
+		util.LogError.Printf("requested pvc %s/%s was not found", nameSpace, claimName)
+		return nil, fmt.Errorf("requested pvc %s/%s was not found", nameSpace, claimName)
+	}
+	var claim *api_v1.PersistentVolumeClaim
+	claim, err = getPersistentVolumeClaim(claimInterface)
+	if err != nil {
+		util.LogError.Printf("requested pvc %s/%s was not found : %s", nameSpace, claimName, err.Error())
+		return nil, fmt.Errorf("requested pvc %s/%s was not found : %s", nameSpace, claimName, err.Error())
+	}
+	util.LogDebug.Printf("claim found namespace :%s name: %s", claim.Namespace, claim.Name)
 
+	return claim, nil
 }
 
 func (p *Provisioner) getClaimOverrideOptions(claim *api_v1.PersistentVolumeClaim, overrides []string, optionsMap map[string]interface{}) map[string]interface{} {
@@ -175,4 +167,13 @@ func (p *Provisioner) getClaimOverrideOptions(claim *api_v1.PersistentVolumeClai
 		}
 	}
 	return optionsMap
+}
+
+func (p *Provisioner) getClaimNameSpace(claim *api_v1.PersistentVolumeClaim) string {
+	nameSpace := "default"
+	if claim != nil && claim.Namespace != "" {
+		nameSpace = claim.Namespace
+	}
+	util.LogDebug.Printf("namespace of the claim %s is : %s", claim.Name, nameSpace)
+	return nameSpace
 }

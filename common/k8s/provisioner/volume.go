@@ -116,29 +116,33 @@ func getPersistentVolume(t interface{}) (*api_v1.PersistentVolume, error) {
 		return &t, nil
 	}
 }
-func (p *Provisioner) handleCloneOfPVC(pv *api_v1.PersistentVolume, key string, value string) (string, error) {
+func (p *Provisioner) handleCloneOfPVC(nameSpace, claimName string) (string, error) {
 	// get the pv corresponding to this pvc and substitute with pv (docker volume name)
-	util.LogDebug.Printf("handling %s with pvcName %s", cloneOfPVC, value)
-	claim, err := p.getClaimFromPVCName(pv, value)
+	util.LogDebug.Printf("handling %s with pvcName %s", cloneOfPVC, claimName)
+	claim, err := p.getClaimFromPVCName(nameSpace, claimName)
 	if err != nil {
 		return "", err
 	}
 	if claim == nil || claim.Spec.VolumeName == "" {
-		return "", fmt.Errorf("no volume found for claim %s", value)
+		return "", fmt.Errorf("no volume found for claim %s", claimName)
 	}
 	return claim.Spec.VolumeName, nil
 }
 
-func (p *Provisioner) getDockerOptions(params map[string]string, pv *api_v1.PersistentVolume, claimSizeinGiB int, listOfOptions []string) map[string]interface{} {
+func (p *Provisioner) getDockerOptions(params map[string]string, class *storage_v1.StorageClass, claimSizeinGiB int, listOfOptions []string, nameSpace string) (map[string]interface{}, error) {
 	dockOpts := make(map[string]interface{}, len(params))
 	foundSizeKey := false
 	for key, value := range params {
 		if key == cloneOfPVC {
-			pvName, err := p.handleCloneOfPVC(pv, key, value)
-			if err == nil {
-				util.LogDebug.Printf("setting key : cloneOf value : %v", pvName)
-				dockOpts["cloneOf"] = pvName
+			pvName, err := p.handleCloneOfPVC(nameSpace, value)
+			if err != nil {
+				util.LogError.Printf("Error to retrieve pvc %s/%s : %s return existing options", nameSpace, value, err.Error())
+				p.eventRecorder.Event(class, api_v1.EventTypeWarning, "ProvisionStorage",
+					fmt.Sprintf("Error to retrieve pvc %s/%s : %s", nameSpace, value, err.Error()))
+				return nil, err
 			}
+			util.LogDebug.Printf("setting key : cloneOf value : %v", pvName)
+			dockOpts["cloneOf"] = pvName
 			continue
 		}
 		dockOpts[key] = value
@@ -158,7 +162,7 @@ func (p *Provisioner) getDockerOptions(params map[string]string, pv *api_v1.Pers
 		util.LogDebug.Print("storage class does not contain size key, overriding to claim size")
 		dockOpts["size"] = claimSizeinGiB
 	}
-	return dockOpts
+	return dockOpts, nil
 }
 
 func contains(s []string, e string) bool {
