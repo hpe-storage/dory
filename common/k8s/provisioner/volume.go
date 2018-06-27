@@ -19,14 +19,14 @@ package provisioner
 import (
 	"fmt"
 	"github.com/hpe-storage/dory/common/util"
+	api_v1 "k8s.io/api/core/v1"
+	storage_v1 "k8s.io/api/storage/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/scheme"
-	api_v1 "k8s.io/client-go/pkg/api/v1"
-	"k8s.io/client-go/pkg/api/v1/ref"
-	storage_v1 "k8s.io/client-go/pkg/apis/storage/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/reference"
 	"strings"
 )
 
@@ -175,14 +175,22 @@ func contains(s []string, e string) bool {
 }
 
 func (p *Provisioner) newPersistentVolume(pvName string, params map[string]string, claim *api_v1.PersistentVolumeClaim, class *storage_v1.StorageClass) (*api_v1.PersistentVolume, error) {
-	claimRef, err := ref.GetReference(scheme.Scheme, claim)
+	claimRef, err := reference.GetReference(scheme.Scheme, claim)
 	if err != nil {
 		util.LogError.Printf("unable to get reference for claim %v. %s", claim, err)
 		return nil, err
 	}
 
 	claimName := getClaimClassName(claim)
+	if class.Parameters == nil {
+		class.Parameters = make(map[string]string)
+	}
 	class.Parameters["name"] = pvName
+
+	if class.ReclaimPolicy == nil {
+		class.ReclaimPolicy = new(api_v1.PersistentVolumeReclaimPolicy)
+		*class.ReclaimPolicy = api_v1.PersistentVolumeReclaimDelete
+	}
 
 	pv := &api_v1.PersistentVolume{
 		ObjectMeta: meta_v1.ObjectMeta{
@@ -196,7 +204,7 @@ func (p *Provisioner) newPersistentVolume(pvName string, params map[string]strin
 			},
 		},
 		Spec: api_v1.PersistentVolumeSpec{
-			PersistentVolumeReclaimPolicy: api_v1.PersistentVolumeReclaimDelete,
+			PersistentVolumeReclaimPolicy: *class.ReclaimPolicy,
 			AccessModes:                   claim.Spec.AccessModes,
 			ClaimRef:                      claimRef,
 			StorageClassName:              claimName,
