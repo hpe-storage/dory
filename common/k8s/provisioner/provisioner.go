@@ -23,15 +23,15 @@ import (
 	"github.com/hpe-storage/dory/common/jconfig"
 	"github.com/hpe-storage/dory/common/util"
 	uuid "github.com/satori/go.uuid"
+	"k8s.io/api/core/v1"
+	api_v1 "k8s.io/api/core/v1"
+	storage_v1 "k8s.io/api/storage/v1"
 	resource_v1 "k8s.io/apimachinery/pkg/api/resource"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	core_v1 "k8s.io/client-go/kubernetes/typed/core/v1"
-	"k8s.io/client-go/pkg/api/v1"
-	api_v1 "k8s.io/client-go/pkg/api/v1"
-	storage_v1 "k8s.io/client-go/pkg/apis/storage/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"math/rand"
@@ -265,7 +265,7 @@ func (p *Provisioner) Start(stop chan struct{}) {
 	// Get the StorageClass store and start it's reflector
 	var classReflector *cache.Reflector
 	p.classStore, classReflector = p.newClassReflector(p.kubeClient)
-	go classReflector.RunUntil(stop)
+	go classReflector.Run(stop)
 
 	// Get and start the Persistent Volume Claim Controller
 	var claimInformer cache.Controller

@@ -4,22 +4,26 @@ import:
   version: ~1.2.0
 - package: gopkg.in/natefinch/lumberjack.v2
   version: ~2.1.0
+- package: k8s.io/api
+  subpackages:
+  - core/v1
+  - storage/v1
+  - storage/v1beta1
 - package: k8s.io/apimachinery
   subpackages:
+  - pkg/api/resource
   - pkg/apis/meta/v1
   - pkg/runtime
   - pkg/version
   - pkg/watch
 - package: k8s.io/client-go
-  version: ~4.0.0
+  version: ~5.0.0
   subpackages:
   - kubernetes
   - kubernetes/scheme
   - kubernetes/typed/core/v1
-  - pkg/api/v1
-  - pkg/api/v1/ref
-  - pkg/apis/storage/v1
-  - pkg/apis/storage/v1beta1
+  - tools/reference
+  - rest
   - tools/cache
   - tools/clientcmd
   - tools/record

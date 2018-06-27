@@ -3,11 +3,11 @@ package provisioner
 import (
 	"fmt"
 	"github.com/hpe-storage/dory/common/docker/dockervol"
+	api_v1 "k8s.io/api/core/v1"
+	storage_v1 "k8s.io/api/storage/v1"
 	resource_v1 "k8s.io/apimachinery/pkg/api/resource"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	api_v1 "k8s.io/client-go/pkg/api/v1"
-	storage_v1 "k8s.io/client-go/pkg/apis/storage/v1"
 	rest "k8s.io/client-go/rest"
 	"testing"
 )

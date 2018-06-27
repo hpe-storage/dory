@@ -19,12 +19,12 @@ package provisioner
 import (
 	"fmt"
 	"github.com/hpe-storage/dory/common/util"
+	storage_v1 "k8s.io/api/storage/v1"
+	storage_v1beta1 "k8s.io/api/storage/v1beta1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
-	storage_v1 "k8s.io/client-go/pkg/apis/storage/v1"
-	storage_v1beta1 "k8s.io/client-go/pkg/apis/storage/v1beta1"
 	"k8s.io/client-go/tools/cache"
 	"strings"
 )
