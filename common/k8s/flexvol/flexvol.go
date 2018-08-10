@@ -184,7 +184,6 @@ func getOrCreate(name, jsonRequest string) (string, error) {
 			util.LogError.Printf("unable to unmarshal options for %v - %s", jsonRequest, err.Error())
 			return "", err
 		}
-		options["manager"] = "dory"
 		newName, err := dvp.Create(name, options)
 		util.LogDebug.Printf("getOrCreate returning %v for %s", newName, name)
 		if err != nil {
