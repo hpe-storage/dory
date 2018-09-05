@@ -126,6 +126,9 @@ func getPersistentVolumeClaim(t interface{}) (*api_v1.PersistentVolumeClaim, err
 
 func (p *Provisioner) getClaimFromPVCName(nameSpace, claimName string) (*api_v1.PersistentVolumeClaim, error) {
 	util.LogDebug.Printf("getClaimFromPVCNames called with %s/%s", nameSpace, claimName)
+	if p.claimsStore == nil {
+		return nil, fmt.Errorf("requested pvc %s/%s was not found because claimStore was nil", nameSpace, claimName)
+	}
 	if len(p.claimsStore.List()) < 1 {
 		return nil, fmt.Errorf("requested pvc %s/%s was not found", nameSpace, claimName)
 	}
@@ -149,7 +152,7 @@ func (p *Provisioner) getClaimFromPVCName(nameSpace, claimName string) (*api_v1.
 	return claim, nil
 }
 
-func (p *Provisioner) getClaimOverrideOptions(claim *api_v1.PersistentVolumeClaim, overrides []string, optionsMap map[string]interface{}) map[string]interface{} {
+func (p *Provisioner) getClaimOverrideOptions(claim *api_v1.PersistentVolumeClaim, overrides []string, optionsMap map[string]interface{}) (map[string]interface{}, error) {
 	util.LogDebug.Printf("handling getClaimOverrideOptions for %s", p.namePrefix)
 	provisionerName := p.namePrefix
 	for _, override := range overrides {
@@ -166,7 +169,23 @@ func (p *Provisioner) getClaimOverrideOptions(claim *api_v1.PersistentVolumeClai
 			}
 		}
 	}
-	return optionsMap
+
+	// check to see if there is cloneOfPVC annotation present
+	volumeName, err := p.getPVFromPVCAnnotation(claim)
+	if err != nil {
+		return nil, err
+	}
+
+	// update the options map with the pv name if there is one
+	if volumeName != "" {
+		optionsMap[cloneOf] = volumeName
+	}
+
+	// make sure cloneOfPVC is removed from the options (all cases)
+	if _, found := optionsMap[cloneOfPVC]; found {
+		delete(optionsMap, cloneOfPVC)
+	}
+	return optionsMap, nil
 }
 
 func (p *Provisioner) getClaimNameSpace(claim *api_v1.PersistentVolumeClaim) string {
@@ -176,4 +195,25 @@ func (p *Provisioner) getClaimNameSpace(claim *api_v1.PersistentVolumeClaim) str
 	}
 	util.LogDebug.Printf("namespace of the claim %s is : %s", claim.Name, nameSpace)
 	return nameSpace
+}
+
+func (p *Provisioner) getPVFromPVCAnnotation(claim *api_v1.PersistentVolumeClaim) (string, error) {
+	// check to see if we have the cloneOfPVC annotation
+	pvcToClone, foundClonePVC := claim.Annotations[fmt.Sprintf("%s%s", p.namePrefix, cloneOfPVC)]
+	if !foundClonePVC {
+		return "", nil
+	}
+
+	namespace := p.getClaimNameSpace(claim)
+	util.LogDebug.Printf("%s%s: %s was found in claim annotations", p.namePrefix, cloneOfPVC, pvcToClone)
+
+	pvName, err := p.getVolumeNameFromClaimName(namespace, pvcToClone)
+	util.LogDebug.Printf("pvc %s/%s maps to pv %s", namespace, pvcToClone, pvName)
+	if err != nil {
+		return "", fmt.Errorf("unable to retrieve pvc %s/%s : %s", namespace, pvcToClone, err.Error())
+	}
+	if pvName == "" {
+		return "", fmt.Errorf("unable to retrieve pvc %s/%s : not found", namespace, pvcToClone)
+	}
+	return pvName, nil
 }

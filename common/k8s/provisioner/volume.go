@@ -116,7 +116,7 @@ func getPersistentVolume(t interface{}) (*api_v1.PersistentVolume, error) {
 		return &t, nil
 	}
 }
-func (p *Provisioner) handleCloneOfPVC(nameSpace, claimName string) (string, error) {
+func (p *Provisioner) getVolumeNameFromClaimName(nameSpace, claimName string) (string, error) {
 	// get the pv corresponding to this pvc and substitute with pv (docker volume name)
 	util.LogDebug.Printf("handling %s with pvcName %s", cloneOfPVC, claimName)
 	claim, err := p.getClaimFromPVCName(nameSpace, claimName)
@@ -134,7 +134,7 @@ func (p *Provisioner) getDockerOptions(params map[string]string, class *storage_
 	foundSizeKey := false
 	for key, value := range params {
 		if key == cloneOfPVC {
-			pvName, err := p.handleCloneOfPVC(nameSpace, value)
+			pvName, err := p.getVolumeNameFromClaimName(nameSpace, value)
 			if err != nil {
 				util.LogError.Printf("Error to retrieve pvc %s/%s : %s return existing options", nameSpace, value, err.Error())
 				p.eventRecorder.Event(class, api_v1.EventTypeWarning, "ProvisionStorage",

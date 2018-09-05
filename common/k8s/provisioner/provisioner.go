@@ -57,6 +57,7 @@ const (
 	defaultStripValue          = true
 	maxWaitForClaims           = 60
 	allowOverrides             = "allowOverrides"
+	cloneOf                    = "cloneOf"
 	cloneOfPVC                 = "cloneOfPVC"
 	manager                    = "manager"
 	managerName                = "k8s"
@@ -376,6 +377,8 @@ func (p *Provisioner) updateVolume(claim *api_v1.PersistentVolumeClaim, provisio
 	return nil
 }
 
+//nolint: gocyclo
+// this is a complex function that we should break down a bit
 func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class *storage_v1.StorageClass) {
 
 	// this can fire multiple times without issue, so we defer this even though we don't have a volume yet
@@ -388,7 +391,6 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class
 	nameSpace := p.getClaimNameSpace(claim)
 
 	// create a copy of the storage class options for NLT-1172
-	// TODO when we support pvc overrides, make the changes here
 	params := make(map[string]string)
 	for key, value := range class.Parameters {
 		params[key] = value
@@ -435,8 +437,14 @@ func (p *Provisioner) provisionVolume(claim *api_v1.PersistentVolumeClaim, class
 		return
 	}
 
-	// get updated options map for docker after handling overrides
-	optionsMap = p.getClaimOverrideOptions(claim, overrides, optionsMap)
+	// get updated options map for docker after handling overrides and annotations
+	optionsMap, err = p.getClaimOverrideOptions(claim, overrides, optionsMap)
+	if err != nil {
+		p.eventRecorder.Event(class, api_v1.EventTypeWarning, "ProvisionStorage", err.Error())
+		util.LogError.Printf("error handling annotations. err=%v", err)
+		return
+	}
+
 	util.LogDebug.Printf("updated optionsMap with overrides %#v", optionsMap)
 
 	// set default docker options if not already set
