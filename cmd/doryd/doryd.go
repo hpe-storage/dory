@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"flag"
 	"fmt"
 	"github.com/hpe-storage/dory/common/k8s/provisioner"
 	"github.com/hpe-storage/dory/common/util"
@@ -27,6 +28,11 @@ import (
 )
 
 func main() {
+
+	// glog configuration control is a bit lacking (which is to say it doesn't exist),
+	// so we simply hack the the value to true.
+	flag.Lookup("logtostderr").Value.Set("true")
+
 	if len(os.Args) < 1 {
 		fmt.Println("Please specify the full path (including filename) to admin config file.")
 		return
@@ -42,6 +48,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
+
 	provisionerName := "dev.hpe.com"
 	if len(os.Args) > 2 {
 		provisionerName = os.Args[2]
