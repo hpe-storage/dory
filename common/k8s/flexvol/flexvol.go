@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -56,8 +57,10 @@ const (
 	// /var/lib/kubelet/pods/fb36bec9-51f7-11e7-8eb8-005056968cbc/volumes/hpe~nimble/test
 	mountPathRegex = "/var/lib/.*/pods/(?P<uuid>[\\w\\d-]*)/volumes/"
 	//docker volume status key
-	devicePathKey = "devicePath"
-	maxTries      = 3
+	devicePathKey  = "devicePath"
+	maxTries       = 3
+	notMounted     = "not mounted"
+	noFileOrDirErr = "no such file or directory"
 )
 
 var (
@@ -171,7 +174,7 @@ func Attach(jsonRequest string) (string, error) {
 
 func getOrCreate(name, jsonRequest string) (string, error) {
 	util.LogDebug.Printf("getOrCreate called with %s and %s\n", name, jsonRequest)
-	volume, err := dvp.Get(name)
+	volume, err := getVolume(name)
 	if err != nil || volume.Volume.Name != name {
 		if !createVolumes {
 			return "", fmt.Errorf("configured to NOT create volumes")
@@ -193,6 +196,29 @@ func getOrCreate(name, jsonRequest string) (string, error) {
 	}
 
 	return volume.Volume.Name, nil
+}
+
+// wrapper for dvp.Get() with retries incorporated
+func getVolume(name string) (volume *dockervol.GetResponse, err error) {
+	util.LogDebug.Printf("getVolume called with %s", name)
+	try := 0
+	for {
+		util.LogDebug.Printf("dvp.Get() called with %s try:%d", name, try+1)
+		volume, err = dvp.Get(name)
+		util.LogDebug.Printf("volume returned from dvp.Get() is %#v", volume)
+		if volume != nil {
+			return volume, nil
+		}
+		if err != nil {
+			if try < maxTries {
+				try++
+				time.Sleep(time.Duration(try) * time.Second)
+				continue
+			}
+			return nil, err
+		}
+		return volume, nil
+	}
 }
 
 //Mount a volume
@@ -251,6 +277,7 @@ func Mount(args []string) (string, error) {
 }
 
 // Unmount a volume
+//nolint :gocyclo
 func Unmount(args []string) (string, error) {
 	util.LogDebug.Printf("Unmount called with %v", args)
 	mountID, err := getMountID(args[0])
@@ -265,12 +292,12 @@ func Unmount(args []string) (string, error) {
 
 	util.LogDebug.Printf("Umount of \"%s\" from %s", args[0], devPath)
 	err = linux.BindUnmount(args[0])
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), notMounted) {
 		return "", err
 	}
 
-	dockerPath, metadata, err := getDockerPathAndMetadata(args[0], devPath)
-	if err != nil {
+	dockerPath, metadata, err := retryGetDockerPathAndMetadata(args[0], devPath)
+	if err != nil && !strings.Contains(strings.ToLower(err.Error()), noFileOrDirErr) {
 		return "", err
 	}
 
@@ -281,7 +308,7 @@ func Unmount(args []string) (string, error) {
 
 	util.LogDebug.Printf("docker unmount of %s %s", dockerVolumeName, mountID)
 	err = dvp.Unmount(dockerVolumeName, mountID)
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), notMounted) {
 		return "", err
 	}
 
@@ -331,10 +358,21 @@ func getMountID(path string) (string, error) {
 
 }
 
+//nolint : gocyclo
 func getVolumeNameFromMountPath(k8sPath, dockerPath string) (string, error) {
 	util.LogDebug.Printf("getVolumeNameFromMountPath called with %s and %s", k8sPath, dockerPath)
+	// sometimes the dockerPath is empty in case of failover/failback scenarios for OSP 3.11 and greater make sure we return the volume if it exists mounted
+	if dockerPath == "" && k8sPath != "" {
+		//if docker path is empty but k8sPath exist, try to use that to the unmount try to use k8s path for volume name
+		volNames := strings.Split(k8sPath, "/")
+		if len(volNames) == 0 || volNames[len(volNames)-1] == "" {
+			return "", fmt.Errorf("no volume found from k8s path %s", k8sPath)
+		}
+		return volNames[len(volNames)-1], nil
+	}
 	name := filepath.Base(dockerPath)
-	dockerVolume, err := dvp.Get(name)
+	dockerVolume, err := getVolume(name)
+	util.LogDebug.Printf("retrieved dockerVolume %#v with name %s", dockerVolume, name)
 	if err != nil || dockerVolume.Volume.Name != name {
 		// The docker plugin might not use the docker volume name in the path.
 		// Therefore we need to look through the know volumes to find out who
@@ -352,9 +390,40 @@ func getVolumeNameFromMountPath(k8sPath, dockerPath string) (string, error) {
 		return "", fmt.Errorf("unable to find docker volume for %s.  No docker volume claimed to be mounted at %s", k8sPath, dockerPath)
 	}
 	if dockerVolume.Volume.Mountpoint == "" {
+		// it could be mounted by other host, so don't treat it as an error
+		util.LogDebug.Printf("found a docker volume but its MountPoint was \"\", checking from /proc/mounts")
+		devPath, _ := linux.GetDeviceFromMountPoint(dockerPath)
+		util.LogDebug.Printf("devPath %s was found for volume %s since MountPoint was \"\" in dockerVolume status", devPath, dockerVolume.Volume.Name)
+		if devPath != "" {
+			util.LogDebug.Printf("devPath %s for docker volume %s", devPath, dockerVolume.Volume.Name)
+			return dockerVolume.Volume.Name, nil
+		}
 		return "", fmt.Errorf("found a docker volume but its MountPoint was \"\"")
 	}
 	return dockerVolume.Volume.Name, nil
+}
+
+func retryGetDockerPathAndMetadata(flexvolPath, devPath string) (string, string, error) {
+	util.LogDebug.Printf("retryGetDockerPathAndMetadata called with flexvolPath(%s) devPath(%s)", flexvolPath, devPath)
+	maxTries := 3
+	try := 0
+	for {
+		dockerPath, metadata, err := getDockerPathAndMetadata(flexvolPath, devPath)
+		if err != nil {
+			util.LogError.Printf("getDockerPathAndMetadata failed for flexvolPath %s, devPath %s : %s", flexvolPath, devPath, err.Error())
+			if try < maxTries {
+				try++
+				util.LogDebug.Printf("try=%d", try)
+				time.Sleep(time.Duration(try) * time.Second)
+				continue
+			}
+			return dockerPath, metadata, err
+		}
+		if err != nil {
+			return dockerPath, metadata, err
+		}
+		return dockerPath, metadata, nil
+	}
 }
 
 func findJSON(args []string, req *AttachRequest) (string, error) {
@@ -398,7 +467,7 @@ func getDockerPathAndMetadata(flexvolPath, devPath string) (string, string, erro
 		dockerPath = string(fileData)
 		util.LogDebug.Printf("getDockerPathAndMetadata: found dockerPath=%s for devPath=%s and flexvolPath=%s", dockerPath, devPath, flexvolPath)
 	}
-
+	util.LogDebug.Printf("getDockerPathAndMetadata: devPath=%s was mounted on dockerPath=%s", devPath, dockerPath)
 	return dockerPath, metadata, nil
 }
 

@@ -19,10 +19,12 @@ package dockerlt
 import (
 	"github.com/hpe-storage/dory/common/connectivity"
 	"github.com/hpe-storage/dory/common/util"
+	"time"
 )
 
 const (
-	defaultSocketPath = "/var/run/docker.sock"
+	defaultSocketPath         = "/var/run/docker.sock"
+	dockerClientSocketTimeout = time.Duration(300) * time.Second
 )
 
 // DockerClient is a light weight docker client
@@ -39,7 +41,7 @@ func NewDockerClient(socketPath string) *DockerClient {
 	if socketPath == "" {
 		socketPath = defaultSocketPath
 	}
-	return &DockerClient{connectivity.NewSocketClient(socketPath)}
+	return &DockerClient{connectivity.NewSocketClientWithTimeout(socketPath, dockerClientSocketTimeout)}
 }
 
 // PluginsGet does a GET against /plugins

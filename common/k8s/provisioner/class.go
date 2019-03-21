@@ -84,7 +84,8 @@ func (p *Provisioner) getClassOverrides(optionsMap map[string]string) []string {
 	if val, ok := optionsMap[allowOverrides]; ok {
 		util.LogDebug.Printf("allowOverrides %s", val)
 		for k, v := range strings.Split(val, ",") {
-			v = strings.Trim(v, "")
+			// remove leading and trailing spaces from value before Trim (needed to support multiline overrides e.g ", ")
+			v = strings.TrimSpace(v)
 			if len(v) > 0 && v != "" {
 				util.LogDebug.Printf("processing iter :%v value :%v", k, v)
 				overrides = append(overrides, v)
