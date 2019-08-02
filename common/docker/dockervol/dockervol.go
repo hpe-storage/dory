@@ -49,6 +49,7 @@ const (
 
 	defaultSocketPath = "/run/docker/plugins/nimble.sock"
 	maxTries          = 3
+	dvpSocketTimeout  = time.Duration(300) * time.Second
 )
 
 //Options  for volumedriver
@@ -154,7 +155,7 @@ func NewDockerVolumePlugin(options *Options) (*DockerVolumePlugin, error) {
 	}
 	dvp := &DockerVolumePlugin{
 		stripK8sOpts: options.StripK8sFromOptions,
-		client:       connectivity.NewSocketClient(options.SocketPath),
+		client:       connectivity.NewSocketClientWithTimeout(options.SocketPath, dvpSocketTimeout),
 		ListOfStorageResourceOptions: options.ListOfStorageResourceOptions,
 		FactorForConversion:          options.FactorForConversion,
 	}
@@ -303,11 +304,21 @@ func (dvp *DockerVolumePlugin) Create(name string, options map[string]interface{
 
 //Mount attaches and mounts a nimble volume returning the path
 func (dvp *DockerVolumePlugin) Mount(name, mountID string) (string, error) {
-	m, err := dvp.mounter(name, mountID, MountURI)
-	if err != nil {
-		return "", err
+	util.LogDebug.Printf("Mount called with %s %s", name, mountID)
+	try := 0
+	for {
+		util.LogDebug.Printf("dvp.mounter() called with %s %s %s try:%d", name, mountID, MountURI, try+1)
+		m, err := dvp.mounter(name, mountID, MountURI)
+		if err != nil {
+			if try < maxTries {
+				try++
+				time.Sleep(time.Duration(try) * time.Second)
+				continue
+			}
+			return "", err
+		}
+		return m, nil
 	}
-	return m, nil
 }
 
 //Unmount and detaches volume for maxTries
