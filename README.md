@@ -1,4 +1,8 @@
-# Kubernetes Flexvolume Driver and StorageClass Provisioner for Docker Volume Plugins
+# Deprecated: This repository no longer actively maintained
+
+Please use the following repositories [Flexvolume Driver](https://github.com/hpe-storage/flexvolume-driver) and [Kubernetes Dynamic Provisioner](https://github.com/hpe-storage/k8s-dynamic-provisioner)
+
+## Kubernetes Flexvolume Driver and StorageClass Provisioner for Docker Volume Plugins
 
 Repository for Dory and Doryd: The [FlexVolume](https://kubernetes.io/docs/concepts/storage/volumes/#out-of-tree-volume-plugins) driver and [Dynamic Volume Provisioner](https://kubernetes.io/docs/concepts/storage/dynamic-provisioning/) for Kubernetes using *any* Docker Volume API compatible plugin. This is [Open Source Software](LICENSE) from [HPE DEV](https://developer.hpe.com).
 
